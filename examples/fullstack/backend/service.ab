@@ -1,0 +1,5 @@
+@rpc
+fun greet(name: string): string {
+    val visitor = if (name == "") "traveler" else name
+    "Hello, $visitor — this response was computed by Abla on the VPS."
+}

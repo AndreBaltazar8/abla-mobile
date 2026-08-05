@@ -1,0 +1,106 @@
+import "abla/build"
+import "../../../src/mobile.ab"
+import "rpc_client.ab"
+
+fun fullstackMobileRun(): int {
+    var name = "Abla"
+    var pendingRequest = 0
+    var response = "The server response will appear here."
+    var status = "Ready"
+    var successfulCalls = 0
+    var screen = 0
+    var completion = MobileHttpResult(0, 0, "", "", false)
+
+    mobileRun($mobile
+        <Screen title="Abla Full Stack" dark={false} onHttp={
+            completion = mobileHttpResult(value);
+            if (completion.valid &&
+                completion.requestId == pendingRequest) {
+                pendingRequest = 0;
+                if (completion.error != "") {
+                    status = "Network error";
+                    response = completion.error
+                } else if (completion.status == 200) {
+                    status = "Live RPC completed";
+                    response = completion.body;
+                    successfulCalls = successfulCalls + 1
+                } else {
+                    status = "Server returned HTTP ${completion.status}";
+                    response = completion.body
+                }
+            }
+        }>
+            <Column key="root" padding={20} spacing={14} scroll>
+                <Text key="title" style="headline">Full-stack Abla</Text>
+                <Row key="navigation" spacing={8}>
+                    <Chip
+                        key="rpc-tab"
+                        selected={screen == 0}
+                        onTap={screen = 0}
+                    >Live RPC</Chip>
+                    <Chip
+                        key="about-tab"
+                        selected={screen == 1}
+                        onTap={screen = 1}
+                    >Architecture</Chip>
+                </Row>
+                <Divider key="divider" />
+
+                <If condition={screen == 0}>
+                    <Card key="request" title="Call the shared contract">
+                        <TextField
+                            key="name"
+                            label="Your name"
+                            value={name}
+                            onChange={name = value}
+                        />
+                        <Button
+                            key="call-server"
+                            enabled={pendingRequest == 0 && name != ""}
+                            onTap={
+                                pendingRequest = requestGreeting(name);
+                                status = if (pendingRequest > 0)
+                                    "Calling abla-svc.oxente.pt…"
+                                else "The HTTP request queue is full"
+                            }
+                        >Call Abla backend</Button>
+                    </Card>
+                    <Card key="response" title="Abla-owned response state">
+                        <Text key="status" style="label">{status}</Text>
+                        <Text key="body">{response}</Text>
+                        <Text key="count">
+                            Successful calls this session: {successfulCalls}
+                        </Text>
+                    </Card>
+                </If>
+
+                <If condition={screen == 1}>
+                    <Card key="architecture" title="One language, two artifacts">
+                        <Text key="contract-copy">
+                            The Android app imports only the typed contract. The
+                            deployed server imports its implementation.
+                        </Text>
+                        <Text key="state-copy">
+                            Name, pending request, response, navigation and call
+                            count are independent variables owned by Abla.
+                        </Text>
+                        <Text key="host-copy">
+                            Reusable Android code performs HTTPS and Compose;
+                            no application Kotlin is generated.
+                        </Text>
+                    </Card>
+                    <Button
+                        key="back"
+                        appearance="outlined"
+                        onTap={screen = 0}
+                    >Try the RPC</Button>
+                </If>
+            </Column>
+        </Screen>
+    )
+}
+
+val fullstackMobileRunExported = #exportFunction(
+    "fullstackMobileRun",
+    "abla_mobile_run"
+)

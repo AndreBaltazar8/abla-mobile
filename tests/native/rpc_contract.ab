@@ -1,0 +1,7 @@
+import contract "../../examples/fullstack/backend/service.ab" as service
+import "../../src/rpc.ab"
+
+fun rpcContractRequest(name: string): int =
+    $mobileRpc("https://abla-svc.oxente.pt", service.greet(name))
+
+fun main: int = rpcContractRequest("Abla")

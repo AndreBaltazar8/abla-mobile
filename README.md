@@ -11,6 +11,11 @@ sends events to a process-long Abla state-machine closure, collects managed
 memory under sustained input, and lets Abla request bounded Android effects.
 Application modules contain no Kotlin source.
 
+The preview also includes copied asynchronous HTTP completions and a shared
+contract full-stack example deployed at `https://abla-svc.oxente.pt`. Request,
+response, loading, error, and navigation state still remain ordinary Abla
+variables.
+
 ## Architecture
 
 There is one `abla_mobile_run()` call per Android process. A `$mobile` template
@@ -49,6 +54,11 @@ The generic host currently renders:
 Abla can request copied, bounded platform effects for toasts, clipboard text,
 safe `http`/`https` browser intents, and haptic feedback.
 
+Result-bearing `GET`/`POST` work uses integer request IDs and copied completion
+events. `$mobileRpc` consumes an `import contract` call and generates an Abla
+request adapter; reusable Kotlin performs only the bounded Android HTTPS
+mechanism.
+
 The host enforces a 1 MiB encoded-tree limit, 4 KiB event/effect payloads, a
 64-event native queue, 4,096 nodes, 64 levels of nesting, and bounded keys,
 properties, and child counts. Native startup and protocol failures become a
@@ -66,14 +76,18 @@ then from this repository run:
 ./tools/test-android-build-config.sh
 ./tools/test-multiscreen.sh
 ./tools/test-showcase-host.sh
+./tools/test-platform-requests.sh
+./tools/test-fullstack.sh
 ./tools/build-showcase-android.sh
 ./tools/build-multiscreen-android.sh
+./tools/build-fullstack-android.sh
 ```
 
 With an unlocked Android device connected through ADB:
 
 ```sh
 ABLA_ADB_SERIAL=127.0.0.1:47102 ./tools/test-showcase-device.sh
+ADB_SERIAL=127.0.0.1:47102 ./tools/test-fullstack-device.sh
 ```
 
 The device test temporarily prevents screen timeout and disables autofill,
@@ -127,7 +141,9 @@ val exported = #exportFunction("application", "abla_mobile_run")
 
 Use `examples/showcase` as the broad component template and
 `examples/multiscreen` as the Abla-owned Home/Detail/Settings navigation
-example. Android packaging is configured in one typed build call:
+example. `examples/fullstack` adds a shared backend contract, generated RPC,
+HTTPS completion state, and `icy` deployment. Android packaging is configured
+in one typed build call:
 
 1. Define state, a `$mobile` tree, and inline actions in one `mobileRun` call;
    export that Abla function as `abla_mobile_run`.
@@ -144,22 +160,28 @@ lowering contract. See [Android builds](docs/android-builds.md) for the typed
 configuration, variants, splash resources, permissions, and the distinction
 between incoming filters and runtime outbound intents. The underlying builder
 API remains available for reusable view functions and programmatically
-generated child groups.
+generated child groups. See [mobile RPC](docs/rpc.md) for HTTP completion and
+contract-generation details.
 
 ## Preview limits
 
 - The app object target is ARM64 Android; the reusable host also builds for
   x86_64, but an x86_64 Abla app target adapter is not included yet.
 - There is one Abla mobile program and one root UI tree per process.
-- Events execute serially. Long-running work needs a future task/service API.
+- Events and HTTP completions execute serially; HTTP itself runs on four
+  bounded host workers.
 - Trees use bounded protocol-v1 JSON. A binary codec is an optimization, not a
   correctness dependency.
 - Panic containment is not yet available for the Android target, so this is a
   developer preview rather than a production-safety claim.
-- Persistence, permissions, networking/RPC orchestration, timers, images,
-  dialogs, and custom native component registries remain future modules.
-- `$mobile` performs event-boundary whole-root rerendering. Background work
-  still needs a future task/completion API to trigger serialized invalidation.
+- Persistence, runtime permissions, timers, images, dialogs, and custom native
+  component registries remain future modules.
+- Contract RPC currently supports one `string` argument/result and text/plain;
+  richer JSON shapes, authentication, cancellation, and versioned errors are
+  future rungs.
+- `$mobile` performs event-boundary whole-root rerendering. HTTP uses the first
+  copied task/completion API; other background services need equivalent
+  request-ID adapters.
 
 See [the design specification](docs/design-spec.md), [protocol](docs/protocol.md),
 and [implementation plan](plan.md) for the exact contracts and remaining work.

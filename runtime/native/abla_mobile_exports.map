@@ -6,6 +6,14 @@ ABLA_MOBILE_1 {
         abla_mobile_platform_effect_next_size;
         abla_mobile_platform_effect_next_byte;
         abla_mobile_platform_effect_pop;
+        abla_mobile_platform_request_next_id;
+        abla_mobile_platform_request_method_size;
+        abla_mobile_platform_request_method_byte;
+        abla_mobile_platform_request_url_size;
+        abla_mobile_platform_request_url_byte;
+        abla_mobile_platform_request_body_size;
+        abla_mobile_platform_request_body_byte;
+        abla_mobile_platform_request_pop;
     local:
         *;
 };

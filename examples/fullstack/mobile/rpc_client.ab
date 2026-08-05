@@ -1,0 +1,9 @@
+import contract "../backend/service.ab" as service
+import "../../../src/rpc.ab"
+
+fun fullstackServiceEndpoint(): string = "https://abla-svc.oxente.pt"
+
+fun requestGreeting(name: string): int = $mobileRpc(
+    fullstackServiceEndpoint(),
+    service.greet(name)
+)

@@ -23,3 +23,20 @@ fun mobileOpenUrl(url: string): bool =
 
 fun mobileHaptic(): bool =
     abla_mobile_platform_effect(#mobileEffectHapticKind, "") == 1
+
+// Result-bearing platform work uses copied request IDs and serialized
+// completion events. The Android host never receives an Abla callback or
+// application-state handle.
+noescape extern:"c" fun abla_mobile_http_request(
+    method: cstring,
+    url: cstring,
+    body: cstring
+): int
+
+fun mobileHttpRequest(method: string, url: string, body: string = ""): int =
+    abla_mobile_http_request(method, url, body)
+
+fun mobileHttpGet(url: string): int = mobileHttpRequest("GET", url)
+
+fun mobileHttpPost(url: string, body: string): int =
+    mobileHttpRequest("POST", url, body)

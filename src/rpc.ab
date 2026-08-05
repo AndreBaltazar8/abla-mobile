@@ -1,0 +1,121 @@
+import "abla/compiler"
+import "abla/compiler/parser"
+import "platform.ab"
+
+// `$mobileRpc(endpoint, contract.action(argument))` consumes a typed contract
+// call and generates only an Abla request adapter. Android receives copied
+// HTTP bytes through the reusable host; it never receives generated
+// application Kotlin or an Abla state handle.
+compile fun mobileRpcHash(text: string, seed: int, factor: int): int {
+    var value = seed
+    var index = 0
+    while (index < text.size) {
+        value = value * factor + text[index] + 1
+        value = value - value / 1000000007 * 1000000007
+        index = index + 1
+    }
+    value
+}
+
+compile fun mobileRpcIdentifier(
+    cursor: ParserCursor,
+    expression: SyntaxExpression
+): string {
+    val identity =
+        "${parserSourceIdentity(cursor)}:${syntaxBegin(expression)}:${syntaxEnd(expression)}"
+    val first = mobileRpcHash(identity, 29, 257)
+    val second = mobileRpcHash(identity, 107, 263)
+    "abla_mobile_rpc_${first}_${second}"
+}
+
+compile fun mobileRpcAnnotated(function: int): bool {
+    var found = false
+    var index = 0
+    while (index < compiler.annotationCount(function)) {
+        if (compiler.annotation(function, index) == "rpc") found = true
+        index = index + 1
+    }
+    found
+}
+
+compile fun mobileRpcFinalize(
+    generatedName: string,
+    expression: SyntaxExpression
+): GeneratedModuleBuilder {
+    val target = typedCallTarget(expression)
+    val module = compilerGeneratedModule(generatedName, expression)
+    val stringType = compilerFindType("string")
+    val intType = compilerFindType("i64")
+    val valid = target >= 0 && typedCallIsContract(expression) &&
+        mobileRpcAnnotated(target) && compiler.parameterCount(target) == 1 &&
+        compiler.parameterType(target, 0) == "string" &&
+        compiler.resultType(target) == "string"
+
+    if (valid) {
+        val names: array<string> = [
+            "endpoint",
+            compiler.parameterName(target, 0)
+        ]
+        val types: array<int> = [stringType, stringType]
+        val arguments: array<SyntaxExpression> = [
+            syntaxIdentifier("endpoint"),
+            syntaxString(compiler.functionName(target)),
+            syntaxIdentifier(compiler.parameterName(target, 0))
+        ]
+        compilerGeneratedExportFunction(
+            module,
+            generatedName,
+            names,
+            types,
+            intType,
+            syntaxCall("mobileRpcRequest", arguments)
+        )
+    } else {
+        val names: array<string> = []
+        val types: array<int> = []
+        compilerGeneratedFunction(
+            module,
+            "invalidMobileRpcContract",
+            names,
+            types,
+            compilerFindType("MobileRpcRequiresRpcStringToStringContract"),
+            syntaxInteger(0)
+        )
+    }
+    module
+}
+
+compile fun mobileRpcParse(cursor: ParserCursor): SyntaxExpression {
+    parserExpect(cursor, "(")
+    parserRawSkipWhitespace(cursor)
+    val endpoint = parserParseAblaExpression(cursor)
+    parserRawSkipWhitespace(cursor)
+    parserExpect(cursor, ",")
+    parserRawSkipWhitespace(cursor)
+    val call = parserParseAblaExpression(cursor)
+    parserRawSkipWhitespace(cursor)
+    parserExpect(cursor, ")")
+    if ((syntaxKind(call) != "call" && syntaxKind(call) != "member.call") ||
+        syntaxChildCount(call) != 1) {
+        parserFail(
+            cursor,
+            "mobile RPC requires one direct contract call with one argument"
+        )
+    }
+    val generatedName = mobileRpcIdentifier(cursor, call)
+    compilerRecordGeneratedExtensionRequest(
+        generatedName,
+        generatedName,
+        call,
+        mobileRpcFinalize
+    )
+    syntaxCall(generatedName, [endpoint, syntaxChild(call, 0)])
+}
+
+#compilerRegisterSubparser("mobileRpc", mobileRpcParse)
+
+fun mobileRpcRequest(endpoint: string, action: string, body: string): int {
+    val separator = if (endpoint.size > 0 &&
+        endpoint[endpoint.size - 1] == 47) "" else "/"
+    mobileHttpPost("$endpoint${separator}rpc/$action", body)
+}

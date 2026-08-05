@@ -49,6 +49,7 @@ function(abla_mobile_add_android_application target)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_android_platform.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_app_host.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_effects.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_requests.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_bridge.c"
         "${abi_object}"
         "${portable_runtime}"

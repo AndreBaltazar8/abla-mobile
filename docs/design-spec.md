@@ -22,7 +22,7 @@ libabla_app.so
   `$mobile` state-machine closure and inline actions
   arbitrary Abla locals/objects/arrays/closures
   semantic UI builders and event logic
-  Abla Mobile C transport, allocator, collector, and platform-effect queue
+  Abla Mobile C transport, allocator, collector, effect and request queues
              |
              | copied bytes and scalar commands only
              v
@@ -100,9 +100,10 @@ rendering is the correctness reference implementation. Stable node keys let
 Compose preserve control/list identity. Keyed subtrees or dependency-tracked
 render scopes may be added after measurement, but must preserve Abla ownership.
 
-The framework cannot observe arbitrary unsynchronized mutations. Work outside
-the serialized event loop will require a future mobile task/completion API or
-an explicit invalidation message.
+The framework cannot observe arbitrary unsynchronized mutations. HTTP uses a
+copied request-ID/completion event to reenter the serialized loop; other
+background work requires an equivalent completion API or explicit invalidation
+message.
 
 ## 5. Abla API and template language
 
@@ -186,6 +187,9 @@ Hard limits include:
 | Native queued events | 64 |
 | Event/effect payload | 4 KiB |
 | Effect queue | 64 |
+| HTTP request queue | 32 |
+| HTTP URL/body | 2 KiB / 16 KiB |
+| HTTP response | 3 KiB |
 | Parsed nodes | 4,096 |
 | Tree nesting | 64 levels |
 | Children of one node | 1,024 |
@@ -199,7 +203,7 @@ while newer presentations are arriving, and rejects malformed or future
 revisions. `$mobile` assigns stable positive action identifiers in source
 traversal order; direct builder users can still choose explicit integers.
 
-## 8. Platform effects
+## 8. Platform services
 
 Effects are requested by Abla through noescape C externs. The app-side native
 runtime immediately copies the payload into a 64-entry queue. At the next event
@@ -216,9 +220,23 @@ Supported effect kinds are:
 Effect identifiers and payloads do not identify Abla state. Browser schemes are
 allowlisted. Queue overflow returns `false` to Abla.
 
-Future services that return values—permissions, documents, media, or sensors—
-must use copied request IDs and post copied completions into the serialized
-event loop. They may not store an Abla closure or state pointer.
+HTTP is the first result-bearing platform service. Abla queues copied method,
+URL, and body bytes and receives a positive request ID. Four reusable host
+workers perform allowlisted `GET`/`POST` requests with normal Android TLS
+validation, 10-second timeouts, no automatic redirects, and bounded response
+data. Each result becomes reserved event `-2`; an optional `Screen.onHttp`
+action decodes it with `mobileHttpResult(value)` and mutates application-owned
+Abla variables before the next render.
+
+`$mobileRpc` is an Abla Mobile parser extension that consumes an annotated
+`import contract` call and generates an Abla request adapter. The first rung
+accepts `@rpc (string) -> string`. `src/rpc_server.ab` discovers the same
+annotated backend functions and generates hosted Abla HTTP routes. No client
+application Kotlin is generated.
+
+Future result-bearing services—permissions, documents, media, or sensors—must
+follow the same copied request-ID/completion pattern. They may not store an
+Abla closure or state pointer.
 
 Android declarations remain package configuration rather than reactive UI.
 The application manifest declares install-time capabilities such as
@@ -294,12 +312,14 @@ The Android preview is accepted when all of these pass:
 5. multi-screen test walks Home, Detail, Settings, and Home across seven
    renders while preserving independent Abla state;
 6. host showcase test publishes a real template-built tree from compiled Abla;
-7. ARM64 objects and both example APKs build from clean sources;
+7. ARM64 objects and all example APKs build from clean sources;
 8. the application modules contain no Kotlin;
 9. ADB test verifies initial render, event mutation, exact stress-event count,
    GC under pressure, Android effect dispatch, and no fatal log;
-10. `ablac`'s RFC implementation and full self-hosted suite pass; and
-11. generated artifacts are excluded from both repositories before publication.
+10. the full-stack test generates the server and client contract adapters,
+    validates `icy`, verifies live TLS/RPC, and rerenders the physical device;
+11. `ablac`'s RFC implementation and full self-hosted suite pass; and
+12. generated artifacts are excluded from both repositories before publication.
 
 ## 12. Explicit preview limits and future work
 
@@ -308,11 +328,12 @@ yet for a production safety claim. Remaining independent extensions are:
 
 - contained Android panics and structured fatal diagnostics;
 - x86_64 application object/ABI support for emulators;
-- mobile tasks, timers, cancellation, and lifecycle completion messages;
+- timers, HTTP cancellation, and lifecycle completion messages;
 - permissions and result-bearing platform services;
 - image/resources, dialogs, navigation stack, and native component registry;
 - persistence and state restoration;
-- Abla-owned HTTP/RPC convenience APIs;
+- generated JSON RPC shapes, versioned errors, authentication, and direct
+  nested-extension ergonomics;
 - binary tree encoding if profiling justifies it;
 - iOS host and target integration.
 

@@ -1,0 +1,21 @@
+import "../../src/android_build.ab"
+
+val fullstackAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
+    "abla-mobile-fullstack",
+    "examples/fullstack/mobile/app.ab",
+    "examples/fullstack/android-app",
+    "debug",
+    mobileAndroidApplication(
+        "org.abla.mobile.fullstack",
+        "Abla Full Stack",
+        1,
+        "0.1.0"
+    ),
+    mobileAndroidBranding("#10212B", ""),
+    [mobileAndroidInternetPermission()],
+    [mobileAndroidLauncher()],
+    true,
+    false
+))
+
+fun main: int = if (fullstackAndroid) 0 else 1

@@ -6,9 +6,30 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONException
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 internal object NativeBridge {
+    private const val HTTP_COMPLETION_EVENT = -2L
+    private const val HTTP_COMPLETION_LIMIT = 4096
+    private const val HTTP_RESPONSE_LIMIT = 3072
+    private val requestExecutor = ThreadPoolExecutor(
+        4,
+        4,
+        0L,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(32),
+        { task -> Thread(task, "abla-mobile-http").apply { isDaemon = true } },
+    )
     private val mutableState = MutableStateFlow<HostState>(HostState.Loading)
     val state: StateFlow<HostState> = mutableState.asStateFlow()
     private val mutableEffects = MutableSharedFlow<HostEffect>(
@@ -49,6 +70,126 @@ internal object NativeBridge {
         if (!mutableEffects.tryEmit(HostEffect(kind, bytes.toString(Charsets.UTF_8)))) {
             fail("The Abla platform effect queue is full")
         }
+    }
+
+    @JvmStatic
+    fun onHttpRequestFromNative(
+        requestId: Long,
+        methodBytes: ByteArray,
+        urlBytes: ByteArray,
+        bodyBytes: ByteArray,
+    ) {
+        val method = methodBytes.toString(Charsets.UTF_8)
+        val url = urlBytes.toString(Charsets.UTF_8)
+        if (requestId <= 0L || (method != "GET" && method != "POST") ||
+            urlBytes.size > 2048 || bodyBytes.size > 16384
+        ) {
+            completeHttp(requestId, 0, "", "invalid HTTP request")
+            return
+        }
+        val uri = try {
+            URI(url)
+        } catch (_: Exception) {
+            completeHttp(requestId, 0, "", "invalid URL")
+            return
+        }
+        if (uri.scheme != "https" && uri.scheme != "http") {
+            completeHttp(requestId, 0, "", "only http and https are allowed")
+            return
+        }
+
+        try {
+            requestExecutor.execute {
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.requestMethod = method
+                    connection.connectTimeout = 10_000
+                    connection.readTimeout = 10_000
+                    connection.instanceFollowRedirects = false
+                    connection.setRequestProperty("Accept", "text/plain")
+                    if (method == "POST") {
+                        connection.doOutput = true
+                        connection.setRequestProperty(
+                            "Content-Type",
+                            "text/plain; charset=utf-8",
+                        )
+                        connection.outputStream.use { it.write(bodyBytes) }
+                    }
+                    val status = connection.responseCode
+                    val stream = if (status in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+                    val response = stream?.use {
+                        it.readLimited(HTTP_RESPONSE_LIMIT)
+                    } ?: ByteArray(0)
+                    if (response.size > HTTP_RESPONSE_LIMIT) {
+                        completeHttp(requestId, status, "", "response is too large")
+                    } else {
+                        completeHttp(
+                            requestId,
+                            status,
+                            response.toString(Charsets.UTF_8),
+                            "",
+                        )
+                    }
+                } catch (failure: Exception) {
+                    completeHttp(
+                        requestId,
+                        0,
+                        "",
+                        failure.message ?: failure.javaClass.simpleName,
+                    )
+                } finally {
+                    connection?.disconnect()
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            completeHttp(requestId, 0, "", "HTTP worker queue is full")
+        }
+    }
+
+    private fun completeHttp(
+        requestId: Long,
+        status: Int,
+        body: String,
+        error: String,
+    ) {
+        val completion = try {
+            JSONObject()
+                .put("requestId", requestId)
+                .put("status", status)
+                .put("body", body)
+                .put("error", error.take(512))
+                .toString()
+                .toByteArray(Charsets.UTF_8)
+        } catch (_: JSONException) {
+            return fail("Could not encode an HTTP completion")
+        }
+        if (completion.size > HTTP_COMPLETION_LIMIT) {
+            return completeHttp(requestId, 0, "", "response is too large")
+        }
+        // Platform completions are revision-independent serialized events.
+        // Revision one is valid after the initial tree has been published.
+        if (!sendEvent(1, HTTP_COMPLETION_EVENT, completion)) {
+            fail("The Abla HTTP completion queue is full or unavailable")
+        }
+    }
+
+    private fun InputStream.readLimited(limit: Int): ByteArray {
+        val output = ByteArrayOutputStream(minOf(limit, 1024))
+        val buffer = ByteArray(1024)
+        var total = 0
+        while (total <= limit) {
+            val read = read(buffer, 0, minOf(buffer.size, limit + 1 - total))
+            if (read < 0) break
+            if (read == 0) continue
+            output.write(buffer, 0, read)
+            total += read
+        }
+        return output.toByteArray()
     }
 
     @JvmStatic

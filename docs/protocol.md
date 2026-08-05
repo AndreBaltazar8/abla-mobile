@@ -1,8 +1,9 @@
 # Abla Mobile protocol v1
 
 Protocol v1 connects one process-long Abla application to one Android host. It
-has three channels: a synchronous scalar command call, a bounded native event
-queue, and a bounded native platform-effect queue.
+has four channels: a synchronous scalar command call, a bounded native event
+queue, a bounded native platform-effect queue, and a bounded platform-request
+queue.
 
 No protocol value is an Abla pointer or handle.
 
@@ -40,9 +41,9 @@ A tree publication begins with command 1, sends every encoded byte, and ends
 with command 2. The native buffer is reset at begin and limited to 1 MiB. The
 host copies the completed byte array into Kotlin before parsing.
 
-Command 3 drains pending platform effects and then waits on the event condition
-variable. Once it returns an event ID, commands 4–6 read the copied current
-event. Payload reads beyond the announced size return zero.
+Command 3 drains pending platform effects and HTTP requests and then waits on
+the event condition variable. Once it returns an event ID, commands 4–6 read
+the copied current event. Payload reads beyond the announced size return zero.
 
 ## Event queue
 
@@ -64,6 +65,11 @@ source traversal order and embeds those identifiers in the corresponding
 nodes. Direct builder users may supply their own positive semantic IDs. Event
 zero is reserved for host shutdown and is never assigned to an interactive
 template element.
+
+Identifier `-2` is reserved for a platform HTTP completion. Its revision is
+independent of a particular presentation and its payload is bounded JSON with
+`requestId`, `status`, `body`, and `error`. `$mobile` dispatches it only to an
+optional `Screen.onHttp` action.
 
 ## Tree JSON
 
@@ -125,6 +131,18 @@ for an invalid kind, oversized payload, null input, or full queue.
 The bridge drains effects at the next event wait through fixed dlsym-resolved
 query functions, publishes copied data into a Kotlin `SharedFlow`, and executes
 the adapter on the main thread.
+
+## Platform HTTP requests
+
+Abla queues a copied method, URL, and body and immediately receives a positive
+request ID. The app-side FIFO holds 32 requests; methods are at most 8 bytes,
+URLs 2 KiB, and bodies 16 KiB. The fixed bridge drains requests at event wait
+and invokes the reusable host with copied byte arrays.
+
+The host accepts `GET` and `POST` over `http`/`https`, does not follow redirects,
+uses 10-second connect/read timeouts, and caps response data at 3 KiB. A worker
+posts the completion through the same 64-entry event FIFO. No request contains
+an Abla callback, closure, object, or state pointer.
 
 ## Versioning
 

@@ -1,0 +1,19 @@
+import "backend/service.ab"
+import "../../src/rpc_server.ab"
+import "abla/compiler"
+
+#compilerGrant("filesystem.write")
+
+compile fun configureFullstackServer(): void {
+    mobileWriteRpcServer(
+        "examples/fullstack/build/server.ab",
+        "../backend/service.ab",
+        "service",
+        8080
+    )
+    return
+}
+
+#compiler.transform(configureFullstackServer)
+
+fun main: int = 0

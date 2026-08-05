@@ -41,6 +41,7 @@ keeps later product work separate. The architecture is defined by
 - Reused the portable Abla value runtime unchanged under private names.
 - Added an AArch64 emitted-value ABI shim and pointer-only C bridge.
 - Added bounded native event and platform-effect queues.
+- Added a bounded copied HTTP request queue and serialized completion events.
 
 ### 3. Semantic UI and reactivity
 
@@ -73,6 +74,8 @@ keeps later product work separate. The architecture is defined by
 - Added structural tree validation and bounded loading/failure screens.
 - Added idempotent process startup and Activity recreation-safe snapshot state.
 - Added Abla-callable toast, clipboard, safe browser, and haptic effects.
+- Added reusable bounded Android HTTPS workers without application networking
+  state or generated Kotlin.
 
 ### 6. Android packaging and showcase
 
@@ -106,6 +109,18 @@ keeps later product work separate. The architecture is defined by
   filters, deep links, version metadata, and splash resources.
 - Seven-render native multi-screen navigation proof and second Kotlin-free APK.
 - Repeatable build and device scripts that preserve the user's screen timeout.
+
+### 8. Full-stack contract RPC
+
+- Added explicit `$mobileRpc` contract-call consumption for the initial
+  `@rpc (string) -> string` rung.
+- Added generated Abla HTTP server routing from the same annotated backend.
+- Added `Screen.onHttp` completion actions and Abla-owned request/result state.
+- Added one repository-contained backend + mobile example and validated its
+  secret-free proprietary `icy.jsonnet` deployment shape.
+- Deployed `abla-svc.oxente.pt` with valid TLS and verified health plus RPC.
+- Installed the Kotlin-free APK on a physical device and proved the live HTTPS
+  response rerendered through copied completion state.
 
 ## Developer-preview exit gate
 
@@ -150,9 +165,11 @@ working local-app preview.
 
 ### Networking and language ergonomics
 
-- Compose existing Abla HTTP/JSON/contract facilities into an Abla-owned mobile
-  RPC/task module; Kotlin must not become the application networking layer.
-- Add cancellation, timeouts, size limits, and stale-completion behavior.
+- Extend the implemented string/text contract rung to generated JSON nominal
+  shapes, versioned errors, authentication, cancellation, and stale-completion
+  policies.
+- Resolve the compiler duplicate-finalizer issue for directly nesting
+  `$mobileRpc` inside `$mobile`; ordinary helper modules work today.
 - Add template-level reusable components and navigation without weakening the
   no-generated-Kotlin or Abla-owned-state boundary.
 - Profile JSON/tree rebuild cost before considering a binary codec or keyed

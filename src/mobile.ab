@@ -1,4 +1,5 @@
 import "abla/compiler/parser"
+import "abla/json"
 import "protocol.ab"
 import "runtime.ab"
 import "ui.ab"
@@ -55,6 +56,35 @@ fun mobilePayloadInt(value: string, fallback: int): int {
 }
 
 fun mobilePayloadBool(value: string): bool = value == "true"
+
+class MobileHttpResult(
+    val requestId: int,
+    val status: int,
+    val body: string,
+    val error: string,
+    val valid: bool
+)
+
+fun mobileHttpResult(payload: string): MobileHttpResult {
+    val parsed = jsonParse(payload)
+    if (!parsed.succeeded || !parsed.value.isObject()) {
+        return MobileHttpResult(0, 0, "", "invalid HTTP completion", false)
+    }
+    val value = parsed.value
+    val requestId = value.get("requestId")
+    val status = value.get("status")
+    val body = value.get("body")
+    val error = value.get("error")
+    val valid = requestId.intAvailable() && status.intAvailable() &&
+        body.isString() && error.isString()
+    MobileHttpResult(
+        requestId.asInt(),
+        status.asInt(),
+        body.asString(),
+        error.asString(),
+        valid
+    )
+}
 
 // One call owns configuration, event dispatch, rerendering, and safepoints.
 // The template closure owns/captures application state entirely inside Abla.
@@ -128,7 +158,8 @@ compile fun mobileTemplateAttribute(
 compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
     if ((name == "key" || name == "visible") &&
         tag != "Screen" && tag != "If") return true
-    if (tag == "Screen") return name == "title" || name == "dark"
+    if (tag == "Screen") return name == "title" || name == "dark" ||
+        name == "onHttp"
     if (tag == "Column") return name == "padding" || name == "spacing" ||
         name == "scroll"
     if (tag == "Row") return name == "spacing"
@@ -165,7 +196,7 @@ compile fun mobileTemplateKnownTag(tag: string): bool =
     tag == "Spacer"
 
 compile fun mobileTemplateIsActionAttribute(name: string): bool =
-    name == "onTap" || name == "onChange"
+    name == "onTap" || name == "onChange" || name == "onHttp"
 
 compile fun mobileTemplateParseActionBody(
     cursor: ParserCursor,
@@ -417,6 +448,14 @@ compile fun mobileTemplateParseNode(
             ),
             root
         ])
+        val completion = mobileTemplateAttributeIndex(names, "onHttp")
+        if (completion >= 0) {
+            if (!braced[completion]) {
+                parserFail(cursor, "onHttp requires an {Abla action}")
+            }
+            actionIds.append(-2)
+            actions.append(values[completion])
+        }
     }
     if (tag == "Column") result = mobileTemplateCall("mobileColumn", [
         key,

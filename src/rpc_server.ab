@@ -1,0 +1,38 @@
+import "abla/compiler"
+
+// Generates the hosted Abla HTTP adapter for @rpc (string) -> string actions.
+// The backend implementation is imported normally by the generated server;
+// mobile clients import the same file with `import contract` and receive only
+// its signatures and reachable data shapes.
+compile fun mobileRpcServerSource(
+    backendImport: string,
+    backendAlias: string,
+    port: int
+): string {
+    val functions = compiler.functionsAnnotated("rpc")
+    var source = "import \"abla/http\"\nimport \"$backendImport\" as $backendAlias\n\n"
+    var routes = ""
+    var index = 0
+    while (index < functions.size) {
+        val function = functions[index]
+        if (compiler.parameterCount(function) == 1 &&
+            compiler.parameterType(function, 0) == "string" &&
+            compiler.resultType(function) == "string") {
+            val name = compiler.functionName(function)
+            source = "$source\nfun ablaMobileRpcHandle${index}(request: HttpRequest): HttpResponse =\n    httpText($backendAlias.$name(request.body))\n"
+            routes = "$routes    router.post(\"/rpc/$name\", ablaMobileRpcHandle${index})\n"
+        }
+        index = index + 1
+    }
+    "$source\nfun ablaMobileRpcHealth(request: HttpRequest): HttpResponse =\n    httpText(\"ok\")\n\nfun main: int {\n    val router = httpRouter()\n    router.get(\"/health\", ablaMobileRpcHealth)\n$routes    serveHttp(router, $port)\n}\n"
+}
+
+compile fun mobileWriteRpcServer(
+    output: string,
+    backendImport: string,
+    backendAlias: string,
+    port: int
+): bool = compiler.writeFile(
+    output,
+    mobileRpcServerSource(backendImport, backendAlias, port)
+)

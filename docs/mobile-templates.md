@@ -61,6 +61,11 @@ For change events, `value` is the copied UTF-8 payload supplied by the host.
 standard controls. An action can also call any imported Abla function,
 including `mobileToast`, `mobileCopyText`, `mobileOpenUrl`, and `mobileHaptic`.
 
+`Screen.onHttp` is the reserved result-bearing platform action. Its `value`
+payload is decoded with `mobileHttpResult(value)` and includes request ID,
+status, body, error, and validity. It executes as event `-2` in the same
+serialized closure before the next whole-root render.
+
 The subparser assigns positive event IDs in source traversal order. Event zero
 only renders; a positive event executes its matching action and then evaluates
 the complete view expression again. `mobileRun` publishes that new immutable
@@ -71,7 +76,7 @@ preserve control and list identity across whole-root rerenders.
 
 | Element | Attributes |
 | --- | --- |
-| `Screen` | `title`, `dark`; exactly one root child |
+| `Screen` | `title`, `dark`, optional `onHttp`; exactly one root child |
 | `Column` | `key`, `padding`, `spacing`, `scroll`, `visible` |
 | `Row` | `key`, `spacing`, `visible` |
 | `Text` | `key`, `style`, `text`, `visible` |
@@ -120,3 +125,6 @@ can select Home, Detail, or Settings content through `<If>` groups while a
 dynamic `Screen.title` follows it. `examples/multiscreen` demonstrates three
 screens, persistent state across navigation, and no activity-per-screen or
 host-owned navigation model.
+
+The full-stack example combines this navigation model with `onHttp` and a
+generated contract adapter. See [Mobile HTTP and contract RPC](rpc.md).

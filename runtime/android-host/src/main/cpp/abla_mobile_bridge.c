@@ -11,6 +11,9 @@
 #define ABLA_TREE_LIMIT (1024U * 1024U)
 #define ABLA_EVENT_LIMIT 64U
 #define ABLA_PAYLOAD_LIMIT 4096U
+#define ABLA_REQUEST_METHOD_LIMIT 8U
+#define ABLA_REQUEST_URL_LIMIT 2048U
+#define ABLA_REQUEST_BODY_LIMIT 16384U
 
 #define ABLA_TREE_BEGIN 1
 #define ABLA_TREE_END 2
@@ -30,6 +33,9 @@ typedef int64_t (*AblaPlatformAttach)(
 typedef int64_t (*AblaEffectNext)(void);
 typedef int64_t (*AblaEffectByte)(int64_t index);
 typedef void (*AblaEffectPop)(void);
+typedef int64_t (*AblaRequestNext)(void);
+typedef int64_t (*AblaRequestByte)(int64_t index);
+typedef void (*AblaRequestPop)(void);
 
 typedef struct AblaMobileEvent {
     int64_t revision;
@@ -57,11 +63,23 @@ typedef struct AblaMobileBridge {
     AblaEffectNext effect_next_size;
     AblaEffectByte effect_next_byte;
     AblaEffectPop effect_pop;
+    uint8_t request_method_bytes[ABLA_REQUEST_METHOD_LIMIT];
+    uint8_t request_url[ABLA_REQUEST_URL_LIMIT];
+    uint8_t request_body[ABLA_REQUEST_BODY_LIMIT];
+    AblaRequestNext request_next_id;
+    AblaRequestNext request_method_size;
+    AblaRequestByte request_method_byte;
+    AblaRequestNext request_url_size;
+    AblaRequestByte request_url_byte;
+    AblaRequestNext request_body_size;
+    AblaRequestByte request_body_byte;
+    AblaRequestPop request_pop;
     bool started;
     JavaVM *vm;
     jclass bridge_class;
     jmethodID tree_method;
     jmethodID effect_method;
+    jmethodID request_callback_method;
     jmethodID failure_method;
 } AblaMobileBridge;
 
@@ -247,6 +265,95 @@ static void abla_drain_platform_effects(void) {
     }
 }
 
+static bool abla_copy_platform_request_field(
+    uint8_t *output,
+    int64_t size,
+    size_t limit,
+    AblaRequestByte byte_at
+) {
+    if (size < 0 || (uint64_t)size > limit) return false;
+    for (int64_t index = 0; index < size; ++index) {
+        const int64_t byte = byte_at(index);
+        if (byte < 0 || byte > 255) return false;
+        output[index] = (uint8_t)byte;
+    }
+    return true;
+}
+
+static void abla_publish_request(
+    int64_t identifier,
+    int64_t method_size,
+    int64_t url_size,
+    int64_t body_size
+) {
+    bool attached = false;
+    JNIEnv *environment = abla_jni_environment(&attached);
+    if (environment == NULL) {
+        abla_log_error("could not obtain JNIEnv for an Abla HTTP request");
+        return;
+    }
+    jbyteArray method = abla_jni_bytes(
+        environment, abla_bridge.request_method_bytes, (size_t)method_size
+    );
+    jbyteArray url = abla_jni_bytes(
+        environment, abla_bridge.request_url, (size_t)url_size
+    );
+    jbyteArray body = abla_jni_bytes(
+        environment, abla_bridge.request_body, (size_t)body_size
+    );
+    if (method != NULL && url != NULL && body != NULL) {
+        (*environment)->CallStaticVoidMethod(
+            environment,
+            abla_bridge.bridge_class,
+            abla_bridge.request_callback_method,
+            (jlong)identifier,
+            method,
+            url,
+            body
+        );
+    }
+    if (method != NULL) (*environment)->DeleteLocalRef(environment, method);
+    if (url != NULL) (*environment)->DeleteLocalRef(environment, url);
+    if (body != NULL) (*environment)->DeleteLocalRef(environment, body);
+    abla_finish_jni_call(environment, attached);
+}
+
+static void abla_drain_platform_requests(void) {
+    if (abla_bridge.request_next_id == NULL) return;
+    int64_t identifier = abla_bridge.request_next_id();
+    while (identifier != 0) {
+        const int64_t method_size = abla_bridge.request_method_size();
+        const int64_t url_size = abla_bridge.request_url_size();
+        const int64_t body_size = abla_bridge.request_body_size();
+        const bool valid = identifier > 0 &&
+            abla_copy_platform_request_field(
+                abla_bridge.request_method_bytes,
+                method_size,
+                ABLA_REQUEST_METHOD_LIMIT,
+                abla_bridge.request_method_byte
+            ) &&
+            abla_copy_platform_request_field(
+                abla_bridge.request_url,
+                url_size,
+                ABLA_REQUEST_URL_LIMIT,
+                abla_bridge.request_url_byte
+            ) &&
+            abla_copy_platform_request_field(
+                abla_bridge.request_body,
+                body_size,
+                ABLA_REQUEST_BODY_LIMIT,
+                abla_bridge.request_body_byte
+            );
+        abla_bridge.request_pop();
+        if (!valid) {
+            abla_publish_failure("libabla_app.so produced an invalid request");
+            return;
+        }
+        abla_publish_request(identifier, method_size, url_size, body_size);
+        identifier = abla_bridge.request_next_id();
+    }
+}
+
 static int64_t abla_host_callback(void *context, int64_t value) {
     (void)context;
     if (value == ABLA_TREE_BEGIN) {
@@ -274,6 +381,7 @@ static int64_t abla_host_callback(void *context, int64_t value) {
     }
     if (value == ABLA_WAIT_EVENT) {
         abla_drain_platform_effects();
+        abla_drain_platform_requests();
         pthread_mutex_lock(&abla_bridge.mutex);
         while (abla_bridge.event_size == 0) {
             pthread_cond_wait(
@@ -344,11 +452,43 @@ static void *abla_mobile_thread(void *unused) {
         library,
         "abla_mobile_platform_effect_pop"
     );
+    abla_bridge.request_next_id = (AblaRequestNext)dlsym(
+        library, "abla_mobile_platform_request_next_id"
+    );
+    abla_bridge.request_method_size = (AblaRequestNext)dlsym(
+        library, "abla_mobile_platform_request_method_size"
+    );
+    abla_bridge.request_method_byte = (AblaRequestByte)dlsym(
+        library, "abla_mobile_platform_request_method_byte"
+    );
+    abla_bridge.request_url_size = (AblaRequestNext)dlsym(
+        library, "abla_mobile_platform_request_url_size"
+    );
+    abla_bridge.request_url_byte = (AblaRequestByte)dlsym(
+        library, "abla_mobile_platform_request_url_byte"
+    );
+    abla_bridge.request_body_size = (AblaRequestNext)dlsym(
+        library, "abla_mobile_platform_request_body_size"
+    );
+    abla_bridge.request_body_byte = (AblaRequestByte)dlsym(
+        library, "abla_mobile_platform_request_body_byte"
+    );
+    abla_bridge.request_pop = (AblaRequestPop)dlsym(
+        library, "abla_mobile_platform_request_pop"
+    );
     if (abla_bridge.effect_next_kind == NULL ||
         abla_bridge.effect_next_size == NULL ||
         abla_bridge.effect_next_byte == NULL ||
-        abla_bridge.effect_pop == NULL) {
-        abla_publish_failure("libabla_app.so is missing platform effects ABI");
+        abla_bridge.effect_pop == NULL ||
+        abla_bridge.request_next_id == NULL ||
+        abla_bridge.request_method_size == NULL ||
+        abla_bridge.request_method_byte == NULL ||
+        abla_bridge.request_url_size == NULL ||
+        abla_bridge.request_url_byte == NULL ||
+        abla_bridge.request_body_size == NULL ||
+        abla_bridge.request_body_byte == NULL ||
+        abla_bridge.request_pop == NULL) {
+        abla_publish_failure("libabla_app.so is missing platform service ABI");
         dlclose(library);
         return NULL;
     }
@@ -395,6 +535,12 @@ Java_org_abla_mobile_host_NativeBridge_start(
         "onEffectFromNative",
         "(I[B)V"
     );
+    abla_bridge.request_callback_method = (*environment)->GetStaticMethodID(
+        environment,
+        abla_bridge.bridge_class,
+        "onHttpRequestFromNative",
+        "(J[B[B[B)V"
+    );
     abla_bridge.failure_method = (*environment)->GetStaticMethodID(
         environment,
         abla_bridge.bridge_class,
@@ -402,6 +548,7 @@ Java_org_abla_mobile_host_NativeBridge_start(
         "([B)V"
     );
     if (abla_bridge.effect_method == NULL ||
+        abla_bridge.request_callback_method == NULL ||
         abla_bridge.failure_method == NULL) {
         pthread_mutex_unlock(&abla_bridge.mutex);
         return JNI_FALSE;
