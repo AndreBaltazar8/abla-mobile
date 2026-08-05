@@ -1,0 +1,33 @@
+import contract "../../examples/fullstack/backend/service.ab" as service
+import "abla/build"
+import "../../src/mobile.ab"
+import "../../src/rpc.ab"
+
+fun nestedRpcMobileRun(): int {
+    var name = "Abla"
+    var pending = 0
+
+    mobileRun($mobile
+        <Screen title="Nested RPC">
+            <Column>
+                <TextField
+                    label="Name"
+                    value={name}
+                    onChange={name = value}
+                />
+                <Button onTap={
+                    pending = $mobileRpc(
+                        "https://abla-svc.oxente.pt",
+                        service.greet(name)
+                    )
+                }>Call</Button>
+                <Text>Request: {pending}</Text>
+            </Column>
+        </Screen>
+    )
+}
+
+val nestedRpcMobileRunExported = #exportFunction(
+    "nestedRpcMobileRun",
+    "abla_mobile_run"
+)

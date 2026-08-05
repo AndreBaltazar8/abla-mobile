@@ -1,6 +1,6 @@
 # Abla Mobile implementation plan
 
-Status: Template-driven Android developer preview complete
+Status: Stabilized template-driven Android developer preview complete
 Updated: 2026-08-05
 
 This plan records what is implemented for the first useful Android release and
@@ -122,19 +122,34 @@ keeps later product work separate. The architecture is defined by
 - Installed the Kotlin-free APK on a physical device and proved the live HTTPS
   response rerendered through copied completion state.
 
+### 9. Runtime and parser-composition stabilization
+
+- Added a checked native application entry that contains explicit Abla runtime
+  panics on the serialized app thread and copies at most 1,024 diagnostic bytes.
+- Added categorized startup, protocol, runtime-panic, unexpected-return, and
+  platform failure states; stopped accepting events after the app exits.
+- Added desktop and physical-device panic proofs, including process-liveness
+  and bounded Compose failure-screen assertions.
+- Fixed `ablac`'s general staged-parser declaration mapping when an outer raw
+  expansion reveals nested generated declarations.
+- Added a compiler regression fixture and directly nested `$mobileRpc` inside
+  the full-stack `$mobile` action, removing its helper workaround.
+
 ## Developer-preview exit gate
 
 The preview goal is reached when, from a clean checkout:
 
-1. all four host/native scripts pass, including `test-mobile-template.sh`;
+1. all host/native scripts pass, including template, RPC, and panic proofs;
 2. `tools/build-showcase-android.sh` builds the APK and confirms no app Kotlin;
 3. `tools/test-showcase-device.sh` passes against an unlocked ADB device;
 4. public ELF/ABI inspection shows only the intended app/mobile symbols and no
    state-handle ABI;
 5. the `ablac` inferred-lambda RFC implementation passes its focused fixture
    and the complete self-hosted compiler suite;
-6. documentation matches the template/JSON/extern architecture; and
-7. generated binaries/build directories are absent before commit and push.
+6. explicit panic containment and nested generated subparsers pass their
+   focused desktop and device/compiler fixtures;
+7. documentation matches the template/JSON/extern architecture; and
+8. generated binaries/build directories are absent before commit and push.
 
 ## Post-preview roadmap
 
@@ -143,7 +158,8 @@ working local-app preview.
 
 ### Production hardening
 
-- Add checked panic containment for Android native entrypoints.
+- Add crash reporting and policy for memory faults, signals, and failures on
+  native threads outside the checked serialized Abla app boundary.
 - Fuzz JSON trees, event payloads, native queues, and failure transitions.
 - Add configuration-recreation and process-background instrumentation tests.
 - Add release AAR publishing, API compatibility checks, and version manifests.
@@ -168,8 +184,6 @@ working local-app preview.
 - Extend the implemented string/text contract rung to generated JSON nominal
   shapes, versioned errors, authentication, cancellation, and stale-completion
   policies.
-- Resolve the compiler duplicate-finalizer issue for directly nesting
-  `$mobileRpc` inside `$mobile`; ordinary helper modules work today.
 - Add template-level reusable components and navigation without weakening the
   no-generated-Kotlin or Abla-owned-state boundary.
 - Profile JSON/tree rebuild cost before considering a binary codec or keyed

@@ -9,7 +9,8 @@ No protocol value is an Abla pointer or handle.
 
 ## App/host attachment
 
-Before calling `abla_mobile_run()`, the bridge resolves and invokes:
+Before calling the checked application entrypoint, the bridge resolves and
+invokes:
 
 ```c
 int64_t abla_mobile_platform_attach(
@@ -21,6 +22,26 @@ int64_t abla_mobile_platform_attach(
 The function/context pair belongs to the fixed native host. It is retained by
 the app-side mobile transport and is invisible to the Abla program and Kotlin.
 Attachment happens once per process.
+
+The bridge then calls this fixed ABI:
+
+```c
+int64_t abla_mobile_run_checked(void);
+int64_t abla_mobile_failure_size(void);
+int64_t abla_mobile_failure_byte(int64_t index);
+```
+
+The checked entry returns `1` for an explicit Abla runtime panic, `0` if the
+application entry unexpectedly returns, and `-1` for reentrant invocation.
+After a panic, the bridge copies at most 1,024 diagnostic bytes through the two
+scalar accessors before publishing the failure. No diagnostic pointer crosses
+the app/host boundary. This boundary deliberately does not recover native
+memory faults, signals, or failures on unrelated threads.
+
+Native failures are reported to Kotlin as one of four categories: startup,
+protocol, runtime panic, or unexpected return. Kotlin adds a fifth platform
+category for failures detected by the reusable Android host itself. Once the
+application entry stops, the bridge rejects further events.
 
 ## Scalar commands
 

@@ -39,8 +39,16 @@ target carries `@rpc`, and generates an Abla request adapter:
 import contract "../backend/service.ab" as service
 import "../../../src/rpc.ab"
 
-fun requestGreeting(name: string): int =
-    $mobileRpc("https://abla-svc.oxente.pt", service.greet(name))
+mobileRun($mobile
+    <Screen title="RPC">
+        <Button onTap={
+            pending = $mobileRpc(
+                "https://abla-svc.oxente.pt",
+                service.greet(name)
+            )
+        }>Call service</Button>
+    </Screen>
+)
 ```
 
 The backend imports the same implementation normally. `src/rpc_server.ab`
@@ -49,10 +57,10 @@ first rung deliberately supports `@rpc (string) -> string`; JSON data shapes,
 versioned errors, authentication, cancellation, and additional parameter/result
 types remain follow-up work.
 
-Keep `$mobileRpc` in an ordinary helper module and call that function from a
-`$mobile` action. The current compiler duplicates a deferred finalizer when
-this parser extension is nested directly inside the `$mobile` extension. This
-is a compiler ergonomics limitation, not a runtime or ownership requirement.
+Parser extensions can be composed directly: `$mobileRpc` may appear inside a
+`$mobile` action as shown above. `ablac` preserves stable declaration handles
+when an outer raw subparser expansion reveals nested generated declarations;
+the compiler fixture and the full-stack mobile build cover this composition.
 
 `examples/fullstack` contains the complete shared contract, generated server,
 Kotlin-free Android client, proprietary `icy` deployment configuration, and

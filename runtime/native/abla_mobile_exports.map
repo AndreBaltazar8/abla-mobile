@@ -1,6 +1,9 @@
 ABLA_MOBILE_1 {
     global:
         abla_mobile_run;
+        abla_mobile_run_checked;
+        abla_mobile_failure_size;
+        abla_mobile_failure_byte;
         abla_mobile_platform_attach;
         abla_mobile_platform_effect_next_kind;
         abla_mobile_platform_effect_next_size;

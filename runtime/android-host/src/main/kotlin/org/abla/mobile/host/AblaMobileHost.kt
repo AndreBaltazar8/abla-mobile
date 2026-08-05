@@ -69,7 +69,7 @@ fun AblaMobileHost(modifier: Modifier = Modifier) {
     val state = NativeBridge.state.collectAsState().value
     when (state) {
         HostState.Loading -> LoadingScreen(modifier)
-        is HostState.Failed -> FailureScreen(state.message, modifier)
+        is HostState.Failed -> FailureScreen(state, modifier)
         is HostState.Ready -> {
             val tree = state.tree
             MaterialTheme(
@@ -142,7 +142,14 @@ private fun LoadingScreen(modifier: Modifier) {
 }
 
 @Composable
-private fun FailureScreen(message: String, modifier: Modifier) {
+private fun FailureScreen(failure: HostState.Failed, modifier: Modifier) {
+    val title = when (failure.kind) {
+        HostFailureKind.Startup -> "Abla Mobile could not start"
+        HostFailureKind.Protocol -> "Abla Mobile protocol failed"
+        HostFailureKind.RuntimePanic -> "Abla app stopped"
+        HostFailureKind.UnexpectedReturn -> "Abla app exited"
+        HostFailureKind.Platform -> "Abla Mobile failed"
+    }
     MaterialTheme {
         Box(
             modifier.fillMaxSize().padding(24.dp),
@@ -153,12 +160,15 @@ private fun FailureScreen(message: String, modifier: Modifier) {
             )) {
                 Column(Modifier.padding(20.dp)) {
                     Text(
-                        "Abla Mobile could not start",
+                        title,
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(
+                        failure.message,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
                 }
             }
         }

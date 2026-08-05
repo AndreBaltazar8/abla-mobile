@@ -61,8 +61,8 @@ mechanism.
 
 The host enforces a 1 MiB encoded-tree limit, 4 KiB event/effect payloads, a
 64-event native queue, 4,096 nodes, 64 levels of nesting, and bounded keys,
-properties, and child counts. Native startup and protocol failures become a
-visible Compose error screen.
+properties, and child counts. Startup, protocol, and explicit Abla runtime
+panics become categorized, bounded Compose error screens.
 
 ## Build and test
 
@@ -78,6 +78,7 @@ then from this repository run:
 ./tools/test-showcase-host.sh
 ./tools/test-platform-requests.sh
 ./tools/test-fullstack.sh
+./tools/test-panic-containment.sh
 ./tools/build-showcase-android.sh
 ./tools/build-multiscreen-android.sh
 ./tools/build-fullstack-android.sh
@@ -88,6 +89,7 @@ With an unlocked Android device connected through ADB:
 ```sh
 ABLA_ADB_SERIAL=127.0.0.1:47102 ./tools/test-showcase-device.sh
 ADB_SERIAL=127.0.0.1:47102 ./tools/test-fullstack-device.sh
+ABLA_ADB_SERIAL=127.0.0.1:47102 ./tools/test-panic-device.sh
 ```
 
 The device test temporarily prevents screen timeout and disables autofill,
@@ -172,8 +174,10 @@ contract-generation details.
   bounded host workers.
 - Trees use bounded protocol-v1 JSON. A binary codec is an optimization, not a
   correctness dependency.
-- Panic containment is not yet available for the Android target, so this is a
-  developer preview rather than a production-safety claim.
+- Explicit Abla runtime panics on the serialized application thread are
+  contained and displayed. Native memory faults, signals, and failures on
+  unrelated threads remain process failures, so this is still a developer
+  preview rather than a production-safety claim.
 - Persistence, runtime permissions, timers, images, dialogs, and custom native
   component registries remain future modules.
 - Contract RPC currently supports one `string` argument/result and text/plain;

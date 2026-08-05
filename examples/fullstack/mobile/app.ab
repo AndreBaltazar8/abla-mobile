@@ -1,6 +1,7 @@
 import "abla/build"
+import contract "../backend/service.ab" as service
 import "../../../src/mobile.ab"
-import "rpc_client.ab"
+import "../../../src/rpc.ab"
 
 fun fullstackMobileRun(): int {
     var name = "Abla"
@@ -58,7 +59,10 @@ fun fullstackMobileRun(): int {
                             key="call-server"
                             enabled={pendingRequest == 0 && name != ""}
                             onTap={
-                                pendingRequest = requestGreeting(name);
+                                pendingRequest = $mobileRpc(
+                                    "https://abla-svc.oxente.pt",
+                                    service.greet(name)
+                                );
                                 status = if (pendingRequest > 0)
                                     "Calling abla-svc.oxente.pt…"
                                 else "The HTTP request queue is full"

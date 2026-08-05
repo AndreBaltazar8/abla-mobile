@@ -23,9 +23,14 @@
 #define ABLA_EVENT_PAYLOAD_BYTE 6
 #define ABLA_TREE_BYTE_BASE 256
 #define ABLA_EFFECT_KIND_LIMIT 4
+#define ABLA_FAILURE_STARTUP 1
+#define ABLA_FAILURE_PROTOCOL 2
+#define ABLA_FAILURE_RUNTIME_PANIC 3
+#define ABLA_FAILURE_UNEXPECTED_RETURN 4
 
 typedef int64_t (*AblaHostCallback)(void *context, int64_t value);
 typedef int64_t (*AblaMobileRun)(void);
+typedef int64_t (*AblaFailureByte)(int64_t index);
 typedef int64_t (*AblaPlatformAttach)(
     AblaHostCallback callback,
     void *context
@@ -75,6 +80,7 @@ typedef struct AblaMobileBridge {
     AblaRequestByte request_body_byte;
     AblaRequestPop request_pop;
     bool started;
+    bool accepting_events;
     JavaVM *vm;
     jclass bridge_class;
     jmethodID tree_method;
@@ -139,7 +145,7 @@ static void abla_finish_jni_call(JNIEnv *environment, bool attached) {
     if (attached) (*abla_bridge.vm)->DetachCurrentThread(abla_bridge.vm);
 }
 
-static void abla_publish_failure(const char *message) {
+static void abla_publish_failure(int kind, const char *message) {
     abla_log_error(message);
     bool attached = false;
     JNIEnv *environment = abla_jni_environment(&attached);
@@ -155,6 +161,7 @@ static void abla_publish_failure(const char *message) {
             environment,
             abla_bridge.bridge_class,
             abla_bridge.failure_method,
+            (jint)kind,
             bytes
         );
         (*environment)->DeleteLocalRef(environment, bytes);
@@ -243,7 +250,10 @@ static void abla_drain_platform_effects(void) {
         if (kind < 1 || kind > ABLA_EFFECT_KIND_LIMIT || size < 0 ||
             size > ABLA_PAYLOAD_LIMIT) {
             abla_bridge.effect_pop();
-            abla_publish_failure("libabla_app.so produced an invalid effect");
+            abla_publish_failure(
+                ABLA_FAILURE_PROTOCOL,
+                "libabla_app.so produced an invalid effect"
+            );
             return;
         }
         abla_bridge.effect_kind = (int)kind;
@@ -253,6 +263,7 @@ static void abla_drain_platform_effects(void) {
             if (byte < 0 || byte > 255) {
                 abla_bridge.effect_pop();
                 abla_publish_failure(
+                    ABLA_FAILURE_PROTOCOL,
                     "libabla_app.so produced an invalid effect payload"
                 );
                 return;
@@ -346,7 +357,10 @@ static void abla_drain_platform_requests(void) {
             );
         abla_bridge.request_pop();
         if (!valid) {
-            abla_publish_failure("libabla_app.so produced an invalid request");
+            abla_publish_failure(
+                ABLA_FAILURE_PROTOCOL,
+                "libabla_app.so produced an invalid request"
+            );
             return;
         }
         abla_publish_request(identifier, method_size, url_size, body_size);
@@ -372,6 +386,7 @@ static int64_t abla_host_callback(void *context, int64_t value) {
     if (value == ABLA_TREE_END) {
         if (!abla_bridge.tree_valid) {
             abla_publish_failure(
+                ABLA_FAILURE_PROTOCOL,
                 "Abla UI tree exceeded its native byte/allocation limit"
             );
             return -1;
@@ -418,12 +433,26 @@ static void *abla_mobile_thread(void *unused) {
     (void)unused;
     void *library = dlopen("libabla_app.so", RTLD_NOW | RTLD_LOCAL);
     if (library == NULL) {
-        abla_publish_failure(dlerror());
+        abla_publish_failure(ABLA_FAILURE_STARTUP, dlerror());
         return NULL;
     }
-    AblaMobileRun run = (AblaMobileRun)dlsym(library, "abla_mobile_run");
-    if (run == NULL) {
-        abla_publish_failure("libabla_app.so does not export abla_mobile_run");
+    AblaMobileRun run_checked = (AblaMobileRun)dlsym(
+        library,
+        "abla_mobile_run_checked"
+    );
+    AblaMobileRun failure_size = (AblaMobileRun)dlsym(
+        library,
+        "abla_mobile_failure_size"
+    );
+    AblaFailureByte failure_byte = (AblaFailureByte)dlsym(
+        library,
+        "abla_mobile_failure_byte"
+    );
+    if (run_checked == NULL || failure_size == NULL || failure_byte == NULL) {
+        abla_publish_failure(
+            ABLA_FAILURE_STARTUP,
+            "libabla_app.so is missing checked panic containment ABI"
+        );
         dlclose(library);
         return NULL;
     }
@@ -432,7 +461,10 @@ static void *abla_mobile_thread(void *unused) {
         "abla_mobile_platform_attach"
     );
     if (attach == NULL || attach(abla_host_callback, &abla_bridge) != 1) {
-        abla_publish_failure("could not attach the Abla Mobile host runtime");
+        abla_publish_failure(
+            ABLA_FAILURE_STARTUP,
+            "could not attach the Abla Mobile host runtime"
+        );
         dlclose(library);
         return NULL;
     }
@@ -488,13 +520,56 @@ static void *abla_mobile_thread(void *unused) {
         abla_bridge.request_body_size == NULL ||
         abla_bridge.request_body_byte == NULL ||
         abla_bridge.request_pop == NULL) {
-        abla_publish_failure("libabla_app.so is missing platform service ABI");
+        abla_publish_failure(
+            ABLA_FAILURE_STARTUP,
+            "libabla_app.so is missing platform service ABI"
+        );
         dlclose(library);
         return NULL;
     }
-    (void)run();
+    pthread_mutex_lock(&abla_bridge.mutex);
+    abla_bridge.accepting_events = true;
+    pthread_mutex_unlock(&abla_bridge.mutex);
+    const int64_t run_status = run_checked();
+    pthread_mutex_lock(&abla_bridge.mutex);
+    abla_bridge.accepting_events = false;
+    pthread_mutex_unlock(&abla_bridge.mutex);
+    if (run_status == 1) {
+        const int64_t size = failure_size();
+        char message[1025];
+        if (size < 0 || size > 1024) {
+            abla_publish_failure(
+                ABLA_FAILURE_RUNTIME_PANIC,
+                "Abla runtime panic had an invalid diagnostic"
+            );
+        } else {
+            bool valid = true;
+            for (int64_t index = 0; index < size; ++index) {
+                const int64_t byte = failure_byte(index);
+                if (byte < 0 || byte > 255) {
+                    valid = false;
+                    break;
+                }
+                message[index] = (char)byte;
+            }
+            message[size] = '\0';
+            abla_publish_failure(
+                ABLA_FAILURE_RUNTIME_PANIC,
+                valid && size > 0 ? message : "The Abla runtime panicked"
+            );
+        }
+    } else if (run_status == 0) {
+        abla_publish_failure(
+            ABLA_FAILURE_UNEXPECTED_RETURN,
+            "abla_mobile_run returned unexpectedly"
+        );
+    } else {
+        abla_publish_failure(
+            ABLA_FAILURE_UNEXPECTED_RETURN,
+            "invalid checked Abla runtime result"
+        );
+    }
     dlclose(library);
-    abla_publish_failure("abla_mobile_run returned unexpectedly");
     return NULL;
 }
 
@@ -545,7 +620,7 @@ Java_org_abla_mobile_host_NativeBridge_start(
         environment,
         abla_bridge.bridge_class,
         "onFailureFromNative",
-        "([B)V"
+        "(I[B)V"
     );
     if (abla_bridge.effect_method == NULL ||
         abla_bridge.request_callback_method == NULL ||
@@ -582,7 +657,8 @@ Java_org_abla_mobile_host_NativeBridge_sendEvent(
     }
 
     pthread_mutex_lock(&abla_bridge.mutex);
-    if (!abla_bridge.started || abla_bridge.event_size >= ABLA_EVENT_LIMIT) {
+    if (!abla_bridge.started || !abla_bridge.accepting_events ||
+        abla_bridge.event_size >= ABLA_EVENT_LIMIT) {
         pthread_mutex_unlock(&abla_bridge.mutex);
         return JNI_FALSE;
     }

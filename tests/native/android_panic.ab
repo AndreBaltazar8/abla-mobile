@@ -1,0 +1,12 @@
+import "abla/build"
+import "../../src/runtime.ab"
+
+fun panicApplication(): int {
+    mobileConfigureRuntime(-1)
+    0
+}
+
+val panicApplicationExported = #exportFunction(
+    "panicApplication",
+    "abla_mobile_run"
+)

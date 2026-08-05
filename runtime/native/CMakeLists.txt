@@ -48,6 +48,7 @@ function(abla_mobile_add_android_application target)
     add_library(${target} SHARED
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_android_platform.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_app_host.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_panic.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_effects.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_requests.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_bridge.c"

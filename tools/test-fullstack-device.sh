@@ -13,6 +13,11 @@ adb -s "$serial" get-state | grep -Fqx device
 original_timeout=$(adb -s "$serial" shell settings get system screen_off_timeout | tr -d '\r')
 original_stay_awake=$(adb -s "$serial" shell settings get global stay_on_while_plugged_in | tr -d '\r')
 cleanup() {
+    adb -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true
+    adb -s "$serial" uninstall "$package" >/dev/null 2>&1 || true
+    adb -s "$serial" shell rm -f \
+        /sdcard/abla-fullstack.xml \
+        /sdcard/abla-fullstack-after.xml >/dev/null 2>&1 || true
     if [[ $original_timeout == null ]]; then
         adb -s "$serial" shell settings delete system screen_off_timeout \
             >/dev/null 2>&1 || true

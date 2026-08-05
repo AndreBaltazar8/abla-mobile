@@ -56,6 +56,7 @@ internal object NativeBridge {
             HostState.Ready(UiTree.fromJson(JSONObject(source)))
         } catch (failure: Exception) {
             HostState.Failed(
+                HostFailureKind.Protocol,
                 "Invalid Abla UI tree: ${failure.message ?: failure.javaClass.simpleName}",
             )
         }
@@ -193,13 +194,20 @@ internal object NativeBridge {
     }
 
     @JvmStatic
-    fun onFailureFromNative(bytes: ByteArray) {
+    fun onFailureFromNative(kind: Int, bytes: ByteArray) {
         val detail = bytes.toString(Charsets.UTF_8).take(1024)
-        fail(if (detail.isEmpty()) "The native Abla program failed" else detail)
+        fail(
+            HostFailureKind.fromNative(kind),
+            if (detail.isEmpty()) "The native Abla program failed" else detail,
+        )
     }
 
     fun fail(message: String) {
-        mutableState.value = HostState.Failed(message)
+        fail(HostFailureKind.Platform, message)
+    }
+
+    fun fail(kind: HostFailureKind, message: String) {
+        mutableState.value = HostState.Failed(kind, message.take(1024))
     }
 
     fun dispatch(tree: UiTree, node: UiNode, payload: String = "") {
@@ -213,10 +221,31 @@ internal object NativeBridge {
 
 internal data class HostEffect(val kind: Int, val payload: String)
 
+internal enum class HostFailureKind {
+    Startup,
+    Protocol,
+    RuntimePanic,
+    UnexpectedReturn,
+    Platform;
+
+    companion object {
+        fun fromNative(value: Int): HostFailureKind = when (value) {
+            1 -> Startup
+            2 -> Protocol
+            3 -> RuntimePanic
+            4 -> UnexpectedReturn
+            else -> Platform
+        }
+    }
+}
+
 internal sealed interface HostState {
     data object Loading : HostState
     data class Ready(val tree: UiTree) : HostState
-    data class Failed(val message: String) : HostState
+    data class Failed(
+        val kind: HostFailureKind,
+        val message: String,
+    ) : HostState
 }
 
 internal data class UiTree(

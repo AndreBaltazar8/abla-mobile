@@ -13,6 +13,10 @@ previous_autofill=""
 
 restore_device() {
     rm -f "$dump_file"
+    adb -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true
+    adb -s "$serial" uninstall "$package" >/dev/null 2>&1 || true
+    adb -s "$serial" shell rm -f /sdcard/abla-mobile-test.xml \
+        >/dev/null 2>&1 || true
     if [[ -n "$previous_timeout" && "$previous_timeout" != "null" ]]; then
         adb -s "$serial" shell settings put system screen_off_timeout \
             "$previous_timeout" >/dev/null 2>&1 || true

@@ -38,12 +38,23 @@ actual_exports=$(readelf -Ws "$app_library" | awk \
     '$7 != "UND" && $5 == "GLOBAL" && $8 ~ /^abla_/ { sub(/@@.*/, "", $8); print $8 }' | \
     sort -u)
 expected_exports=$(printf '%s\n' \
+    abla_mobile_failure_byte \
+    abla_mobile_failure_size \
     abla_mobile_platform_attach \
     abla_mobile_platform_effect_next_byte \
     abla_mobile_platform_effect_next_kind \
     abla_mobile_platform_effect_next_size \
     abla_mobile_platform_effect_pop \
-    abla_mobile_run | sort)
+    abla_mobile_platform_request_body_byte \
+    abla_mobile_platform_request_body_size \
+    abla_mobile_platform_request_method_byte \
+    abla_mobile_platform_request_method_size \
+    abla_mobile_platform_request_next_id \
+    abla_mobile_platform_request_pop \
+    abla_mobile_platform_request_url_byte \
+    abla_mobile_platform_request_url_size \
+    abla_mobile_run \
+    abla_mobile_run_checked | sort)
 if [[ "$actual_exports" != "$expected_exports" ]]; then
     echo "unexpected public Abla application ABI:" >&2
     echo "$actual_exports" >&2
@@ -51,4 +62,4 @@ if [[ "$actual_exports" != "$expected_exports" ]]; then
 fi
 
 echo "Android showcase built without application Kotlin: $apk"
-echo "Public native ABI contains only the fixed parameterless mobile entry/transport"
+echo "Public native ABI contains only the fixed mobile entry/transport/failure surface"

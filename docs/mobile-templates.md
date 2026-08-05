@@ -58,8 +58,10 @@ onTap={
 
 For change events, `value` is the copied UTF-8 payload supplied by the host.
 `mobilePayloadBool(value)` and `mobilePayloadInt(value, fallback)` cover the
-standard controls. An action can also call any imported Abla function,
-including `mobileToast`, `mobileCopyText`, `mobileOpenUrl`, and `mobileHaptic`.
+standard controls. An action can also call any imported Abla function or
+compatible parser extension, including `mobileToast`, `mobileCopyText`,
+`mobileOpenUrl`, `mobileHaptic`, and a directly nested `$mobileRpc` contract
+request.
 
 `Screen.onHttp` is the reserved result-bearing platform action. Its `value`
 payload is decoded with `mobileHttpResult(value)` and includes request ID,

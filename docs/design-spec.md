@@ -49,8 +49,9 @@ These are architectural release gates:
 8. Platform-local mechanics such as focus, cursor selection, scroll position,
    animation clocks, and pressed state may remain in Compose.
 9. Abla state is accessed by one serialized event loop in the preview.
-10. Android is not called production-safe until native panic containment is
-    implemented for this target.
+10. Explicit Abla runtime panics on the serialized app thread are contained;
+    memory faults, signals, and unrelated native threads remain outside that
+    boundary and prevent a production-safety claim.
 
 The mobile native transport does retain a platform-owned C function and C
 context installed before Abla starts. Neither value points to Abla memory and
@@ -78,7 +79,10 @@ Persistence after process death is application work and is not implied by this
 lifetime model.
 
 If the library cannot load, lacks a required ABI symbol, emits an invalid tree,
-or returns unexpectedly, the host switches to a bounded visible failure state.
+raises an explicit Abla runtime panic, or returns unexpectedly, the host
+switches to a categorized, bounded visible failure state and rejects further
+events. The checked entry copies panic diagnostics through scalar byte
+accessors; no application pointer crosses the boundary.
 
 ## 4. Reactivity
 
@@ -271,7 +275,8 @@ already a copied runtime effect. Neither mechanism exposes an Abla handle.
 
 `runtime/native/CMakeLists.txt` links the emitted object with:
 
-- Android-owned allocation, conservative collection, roots, and panic policy;
+- Android-owned allocation, conservative collection, roots, and checked panic
+  boundary;
 - the fixed app/host transport and platform effect queue;
 - the portable `ablac` value runtime compiled unchanged under private names;
 - a pointer-only value bridge; and
@@ -316,24 +321,28 @@ The Android preview is accepted when all of these pass:
 8. the application modules contain no Kotlin;
 9. ADB test verifies initial render, event mutation, exact stress-event count,
    GC under pressure, Android effect dispatch, and no fatal log;
-10. the full-stack test generates the server and client contract adapters,
-    validates `icy`, verifies live TLS/RPC, and rerenders the physical device;
-11. `ablac`'s RFC implementation and full self-hosted suite pass; and
-12. generated artifacts are excluded from both repositories before publication.
+10. desktop and device panic tests prove an explicit Abla panic becomes a
+    bounded runtime-failure screen while the Android host process stays alive;
+11. the full-stack test directly nests `$mobileRpc` inside `$mobile`, generates
+    server/client adapters, validates `icy`, verifies live TLS/RPC, and
+    rerenders the physical device;
+12. `ablac`'s focused nested-generated-subparser fixture and full self-hosted
+    suite pass; and
+13. generated artifacts are excluded from both repositories before publication.
 
 ## 12. Explicit preview limits and future work
 
 The preview is suitable for experimenting with useful local Android apps, not
 yet for a production safety claim. Remaining independent extensions are:
 
-- contained Android panics and structured fatal diagnostics;
+- native crash reporting and policies for memory faults, signals, and failures
+  outside the serialized Abla app thread;
 - x86_64 application object/ABI support for emulators;
 - timers, HTTP cancellation, and lifecycle completion messages;
 - permissions and result-bearing platform services;
 - image/resources, dialogs, navigation stack, and native component registry;
 - persistence and state restoration;
-- generated JSON RPC shapes, versioned errors, authentication, and direct
-  nested-extension ergonomics;
+- generated JSON RPC shapes, versioned errors, and authentication;
 - binary tree encoding if profiling justifies it;
 - iOS host and target integration.
 

@@ -1,0 +1,21 @@
+import "../src/android_build.ab"
+
+val panicAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
+    "abla-mobile-panic-proof",
+    "tests/native/android_panic.ab",
+    "examples/showcase/android-app",
+    "panic",
+    mobileAndroidApplication(
+        "org.abla.mobile.panicproof",
+        "Abla Panic Proof",
+        1,
+        "0.1.0"
+    ),
+    mobileAndroidBranding("#10131A", ""),
+    [],
+    [mobileAndroidLauncher()],
+    true,
+    false
+))
+
+fun main: int = if (panicAndroid) 0 else 1

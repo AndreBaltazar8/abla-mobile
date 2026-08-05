@@ -12,6 +12,10 @@ mkdir -p "$output_directory"
     --emit object -o "$output_directory/rpc-contract.o" \
     --fast --no-cache
 
+"$compiler" build "$project_root/tests/native/nested_rpc_mobile.ab" \
+    --emit object -o "$output_directory/nested-rpc-mobile.o" \
+    --fast --no-cache
+
 "$compiler" build "$example_directory/server_build.ab" \
     -o "$output_directory/server-build-driver" --fast --no-cache
 "$compiler" build "$example_directory/build/server.ab" \

@@ -7,14 +7,18 @@ The mobile application uses:
 
 ```abla
 import contract "../backend/service.ab" as service
+import "../../../src/rpc.ab"
 
-fun requestGreeting(name: string): int = $mobileRpc(
-    "https://abla-svc.oxente.pt",
-    service.greet(name)
+mobileRun($mobile
+    <Screen title="Full stack">
+        <Button onTap={
+            pendingRequest = $mobileRpc(
+                "https://abla-svc.oxente.pt",
+                service.greet(name)
+            )
+        }>Call backend</Button>
+    </Screen>
 )
-
-// Called by the `$mobile` onTap action.
-pendingRequest = requestGreeting(name)
 ```
 
 `$mobileRpc` is an Abla Mobile parser extension. It validates the imported
@@ -23,9 +27,10 @@ adapter. The reusable Android host performs HTTPS and posts a copied completion
 to the screen's `onHttp` action. All request, response, navigation, and UI state
 remains in ordinary captured Abla variables.
 
-The small helper currently keeps one deferred parser extension outside the
-other. Directly nesting `$mobileRpc` inside `$mobile` exposes a duplicate-finalizer
-compiler bug; it does not require generated Kotlin or a different runtime.
+`$mobileRpc` is nested directly inside the `$mobile` action. The compiler's
+general staged-parser declaration mapping keeps both generated adapters
+distinct; the application still needs no generated Kotlin or separate helper
+module.
 
 Build the server with `make server`, or deploy it with `icy deploy --watch`.
 The checked-in `icy.jsonnet` contains deployment shape only and no secrets.

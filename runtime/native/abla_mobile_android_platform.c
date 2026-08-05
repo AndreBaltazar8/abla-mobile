@@ -36,6 +36,8 @@ static size_t collection_index_count;
 static AblaAndroidAllocation** mark_worklist;
 static size_t mark_worklist_count;
 
+_Noreturn void abla_mobile_raise_panic(const char* message, size_t length);
+
 void* abla_platform_alloc(size_t size) {
     const size_t measured = size == 0 ? 1 : size;
     if (measured > SIZE_MAX - sizeof(AblaAndroidAllocation) ||
@@ -86,7 +88,7 @@ _Noreturn void abla_platform_panic(const char* message, size_t length) {
         (int)(length > (size_t)INT_MAX ? INT_MAX : length),
         message
     );
-    abort();
+    abla_mobile_raise_panic(message, length);
 }
 
 int64_t abla_platform_memory_checkpoint(void) {

@@ -10,11 +10,13 @@ class AblaMobileActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (!NativeBridge.start()) {
-            NativeBridge.fail("Unable to start libabla_app.so")
+            NativeBridge.fail(
+                HostFailureKind.Startup,
+                "Unable to start libabla_app.so",
+            )
         }
         setContent {
             AblaMobileHost()
         }
     }
 }
-
