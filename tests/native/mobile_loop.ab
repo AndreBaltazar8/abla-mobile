@@ -1,0 +1,41 @@
+import "abla/build"
+import "../../src/protocol.ab"
+
+// This proof deliberately owns several unrelated locals. Nothing outside this
+// call receives a pointer or handle to them.
+fun mobileLoop(callback: (int) -> int): int {
+    var count = 0
+    var status = "ready"
+    var renders = 0
+    var running = true
+
+    while (running) {
+        renders = renders + 1
+        val tree = "{\"revision\":$renders,\"count\":$count,\"status\":\"$status\"}"
+
+        // Keep callback invocation direct in the exported function. The
+        // foreign ABI guarantees only a synchronously borrowed callback.
+        callback(#mobileHostTreeBegin)
+        var byte = 0
+        while (byte < tree.size) {
+            callback(#mobileHostTreeByteBase + tree[byte])
+            byte = byte + 1
+        }
+        callback(#mobileHostTreeEnd)
+
+        val event = callback(#mobileHostWaitEvent)
+        val eventRevision = callback(#mobileHostEventRevision)
+        if (event == 1 && eventRevision == renders) {
+            count = count + 1
+            status = "incremented"
+        }
+        if (event == 0) running = false
+    }
+
+    if (count == 2 && status == "incremented" && renders == 3) 42 else 1
+}
+
+val mobileLoopExported = #exportFunction(
+    "mobileLoop",
+    "abla_mobile_run"
+)

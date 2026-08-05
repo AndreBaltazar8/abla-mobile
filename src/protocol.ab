@@ -1,0 +1,23 @@
+// Fixed scalar-stream protocol shared by the Abla event loop and native host.
+// Values 256..511 carry one published-tree byte. The remaining values are
+// commands. Keeping this surface scalar lets the process-long application use
+// the existing call-scoped foreign callback ABI without exporting Abla state.
+
+compile val mobileHostTreeBegin = 1
+compile val mobileHostTreeEnd = 2
+compile val mobileHostWaitEvent = 3
+compile val mobileHostEventRevision = 4
+compile val mobileHostEventPayloadSize = 5
+compile val mobileHostEventPayloadByte = 6
+compile val mobileHostTreeByteBase = 256
+
+fun mobilePublishTree(callback: (int) -> int, tree: string): void {
+    callback(#mobileHostTreeBegin)
+    var index = 0
+    while (index < tree.size) {
+        callback(#mobileHostTreeByteBase + tree[index])
+        index = index + 1
+    }
+    callback(#mobileHostTreeEnd)
+    return
+}
