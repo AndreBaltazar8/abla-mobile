@@ -13,3 +13,11 @@ fun mobileConfigureRuntime(memoryLimitBytes: int): void {
 fun mobileMemoryLiveBytes(): int = memoryLiveBytes()
 
 fun mobileCollectMemory(): int = memoryCollect()
+
+// A process-long exported mobile entry is not reached from the application's
+// ordinary `main`. Calling this framework safepoint makes collection explicit
+// and causes the compiler to root the complete event-loop call chain.
+fun mobileRuntimeSafepoint(): void {
+    if (memoryLiveBytes() >= 8388608) memoryCollect()
+    return
+}

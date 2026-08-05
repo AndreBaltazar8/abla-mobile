@@ -225,8 +225,8 @@ fun showcaseRender(
 // borrowed for this call and invoked directly, satisfying the existing Abla
 // foreign ABI without creating an application/state handle.
 fun showcaseMobileRun(callback: (int) -> int): int {
-    // Opting into a managed limit enables compiler-emitted root frames and
-    // automatic pressure collection for this process-long application call.
+    // The importable mobile runtime owns the managed limit and explicit
+    // safepoint used by this process-long exported call.
     mobileConfigureRuntime(268435456)
     var revision = 0
     var count = 0
@@ -262,6 +262,7 @@ fun showcaseMobileRun(callback: (int) -> int): int {
             treeByte = treeByte + 1
         }
         callback(#mobileHostTreeEnd)
+        mobileRuntimeSafepoint()
 
         val event = callback(#mobileHostWaitEvent)
         val eventRevision = callback(#mobileHostEventRevision)
