@@ -59,6 +59,12 @@ the host displays a bounded failure. The Abla preview accepts positive
 revisions no newer than its last published revision; this permits queued text
 composition and slider changes while later trees reach Compose.
 
+`$mobile` assigns positive identifiers to action attributes in deterministic
+source traversal order and embeds those identifiers in the corresponding
+nodes. Direct builder users may supply their own positive semantic IDs. Event
+zero is reserved for host shutdown and is never assigned to an interactive
+template element.
+
 ## Tree JSON
 
 The root object is:

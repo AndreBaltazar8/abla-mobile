@@ -1,0 +1,562 @@
+import "abla/compiler/parser"
+import "protocol.ab"
+import "runtime.ab"
+import "ui.ab"
+
+// The runtime value produced by a `$mobile` template. The generated template
+// is a single FnMut state machine: event 0 renders only, while a positive event
+// first executes its inline Abla action and then returns the next view.
+class MobileView(
+    val title: string,
+    val darkTheme: bool,
+    val root: MobileNode
+)
+
+fun mobileView(title: string, darkTheme: bool, root: MobileNode): MobileView =
+    MobileView(title, darkTheme, root)
+
+fun mobileString(value: any): string = "$value"
+
+fun mobileConcat(left: string, right: string): string = "$left$right"
+
+// Text nodes may span lines and interpolation boundaries in the template.
+// Collapse source formatting whitespace only after the complete runtime text
+// has been assembled so `Count: {count}` keeps its meaningful separator.
+fun mobileNormalizeText(value: string): string {
+    var result = ""
+    var pendingSpace = false
+    var index = 0
+    while (index < value.size) {
+        val byte = value[index]
+        val whitespace = byte == 32 || byte == 9 || byte == 10 || byte == 13
+        if (whitespace) {
+            if (result != "") pendingSpace = true
+        } else {
+            if (pendingSpace) result = "$result "
+            result = "$result${value.slice(index, index + 1)}"
+            pendingSpace = false
+        }
+        index = index + 1
+    }
+    result
+}
+
+fun mobilePayloadInt(value: string, fallback: int): int {
+    var valid = value.size > 0
+    var result = 0
+    var index = 0
+    while (valid && index < value.size) {
+        val byte = value[index]
+        if (byte < 48 || byte > 57) valid = false
+        if (valid) result = result * 10 + byte - 48
+        index = index + 1
+    }
+    if (valid) result else fallback
+}
+
+fun mobilePayloadBool(value: string): bool = value == "true"
+
+// One call owns configuration, event dispatch, rerendering, and safepoints.
+// The template closure owns/captures application state entirely inside Abla.
+fun mobileRun(
+    var application: FnMut(int, string) -> MobileView
+): int {
+    mobileConfigureRuntime(268435456)
+    var revision = 0
+    var event = 0
+    var payload = ""
+    var running = true
+    while (running) {
+        val view = application(event, payload)
+        revision = revision + 1
+        mobilePublishTree(mobileEncodeTree(
+            revision,
+            view.title,
+            view.darkTheme,
+            view.root
+        ))
+        mobileRuntimeSafepoint()
+
+        event = mobileWaitEvent()
+        val eventRevision = mobileEventRevision()
+        payload = mobileEventPayload()
+        if (event == 0) running = false
+        if (eventRevision <= 0 || eventRevision > revision) event = -1
+    }
+    0
+}
+
+compile fun mobileTemplateWhitespace(value: string): bool {
+    var whitespace = true
+    var index = 0
+    while (whitespace && index < value.size) {
+        val byte = value[index]
+        whitespace = byte == 32 || byte == 9 || byte == 10 || byte == 13
+        index = index + 1
+    }
+    whitespace
+}
+
+compile fun mobileTemplateCall(
+    name: string,
+    arguments: array<SyntaxExpression>
+): SyntaxExpression = syntaxCall(name, arguments)
+
+compile fun mobileTemplateAttributeIndex(
+    names: array<string>,
+    name: string
+): int {
+    var result = -1
+    var index = 0
+    while (result < 0 && index < names.size) {
+        if (names[index] == name) result = index
+        index = index + 1
+    }
+    result
+}
+
+compile fun mobileTemplateAttribute(
+    names: array<string>,
+    values: array<SyntaxExpression>,
+    name: string,
+    fallback: SyntaxExpression
+): SyntaxExpression {
+    val index = mobileTemplateAttributeIndex(names, name)
+    if (index < 0) fallback else values[index]
+}
+
+compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
+    if ((name == "key" || name == "visible") &&
+        tag != "Screen" && tag != "If") return true
+    if (tag == "Screen") return name == "title" || name == "dark"
+    if (tag == "Column") return name == "padding" || name == "spacing" ||
+        name == "scroll"
+    if (tag == "Row") return name == "spacing"
+    if (tag == "Text") return name == "style" || name == "text"
+    if (tag == "Button") return name == "enabled" || name == "appearance" ||
+        name == "onTap" || name == "text"
+    if (tag == "TextField") return name == "label" || name == "value" ||
+        name == "onChange"
+    if (tag == "Switch" || tag == "Checkbox") return name == "label" ||
+        name == "checked" || name == "onChange"
+    if (tag == "Slider") return name == "label" || name == "value" ||
+        name == "minimum" || name == "maximum" || name == "onChange"
+    if (tag == "Progress") return name == "value" || name == "maximum" ||
+        name == "circular"
+    if (tag == "Spacer") return name == "height"
+    if (tag == "Card") return name == "title"
+    if (tag == "Chip") return name == "text" || name == "selected" ||
+        name == "payload" || name == "onTap"
+    if (tag == "If") return name == "condition"
+    false
+}
+
+compile fun mobileTemplateIsContainer(tag: string): bool =
+    tag == "Screen" || tag == "Column" || tag == "Row" || tag == "Card" ||
+    tag == "List" || tag == "If"
+
+compile fun mobileTemplateIsTextual(tag: string): bool =
+    tag == "Text" || tag == "Button" || tag == "Chip"
+
+compile fun mobileTemplateKnownTag(tag: string): bool =
+    mobileTemplateIsContainer(tag) || mobileTemplateIsTextual(tag) ||
+    tag == "TextField" || tag == "Switch" || tag == "Checkbox" ||
+    tag == "Slider" || tag == "Progress" || tag == "Divider" ||
+    tag == "Spacer"
+
+compile fun mobileTemplateIsActionAttribute(name: string): bool =
+    name == "onTap" || name == "onChange"
+
+compile fun mobileTemplateParseActionBody(
+    cursor: ParserCursor,
+    attribute: string
+): SyntaxExpression {
+    val statements: array<SyntaxExpression> = []
+    var complete = false
+    while (!complete) {
+        parserRawSkipWhitespace(cursor)
+        if (parserRawAt(cursor, "}")) {
+            complete = true
+        } else {
+            statements.append(parserParseAblaExpression(cursor))
+            parserRawSkipWhitespace(cursor)
+            if (!parserRawAt(cursor, "}") &&
+                !parserRawConsume(cursor, ";")) {
+                parserFail(
+                    cursor,
+                    "$attribute action expressions must be separated by `;`"
+                )
+            }
+        }
+    }
+    if (statements.size == 0) {
+        parserFail(cursor, "$attribute action cannot be empty")
+        syntaxInteger(0)
+    } else if (statements.size == 1) statements[0]
+    else syntaxBlock(statements)
+}
+
+compile fun mobileTemplateParseAttributes(
+    cursor: ParserCursor,
+    tag: string,
+    var names: array<string>,
+    var values: array<SyntaxExpression>,
+    var braced: array<bool>
+): bool {
+    var selfClosing = false
+    var complete = false
+    while (!complete) {
+        parserRawSkipWhitespace(cursor)
+        if (parserRawConsume(cursor, "/>")) {
+            selfClosing = true
+            complete = true
+        } else if (parserRawConsume(cursor, ">")) complete = true
+        else {
+            val name = parserRawTakeName(cursor)
+            if (name == "") {
+                parserFail(cursor, "expected a mobile attribute")
+                return false
+            }
+            if (!mobileTemplateAllowsAttribute(tag, name)) {
+                parserFail(cursor, "unsupported $tag attribute: $name")
+            }
+            if (mobileTemplateAttributeIndex(names, name) >= 0) {
+                parserFail(cursor, "duplicate mobile attribute: $name")
+            }
+            parserRawSkipWhitespace(cursor)
+            var value = syntaxBoolean(true)
+            var expressionValue = false
+            if (parserRawConsume(cursor, "=")) {
+                parserRawSkipWhitespace(cursor)
+                if (parserRawConsume(cursor, "\"")) {
+                    value = syntaxString(parserRawTakeUntil(cursor, "\""))
+                    parserRawExpect(cursor, "\"")
+                } else if (parserRawConsume(cursor, "{")) {
+                    if (mobileTemplateIsActionAttribute(name)) {
+                        value = mobileTemplateParseActionBody(cursor, name)
+                    } else value = parserParseAblaExpression(cursor)
+                    parserRawExpect(cursor, "}")
+                    expressionValue = true
+                } else parserFail(
+                    cursor,
+                    "mobile attributes use quoted literals or {Abla expressions}"
+                )
+            }
+            names.append(name)
+            values.append(value)
+            braced.append(expressionValue)
+        }
+    }
+    selfClosing
+}
+
+compile fun mobileTemplateParseText(
+    cursor: ParserCursor,
+    tag: string
+): SyntaxExpression {
+    var result = syntaxString("")
+    var closed = false
+    while (!closed) {
+        if (parserRawEnd(cursor)) {
+            closed = true
+            parserFail(cursor, "unterminated mobile $tag element")
+        } else if (parserRawAt(cursor, "</")) closed = true
+        else if (parserRawAt(cursor, "<")) {
+            parserFail(cursor, "$tag content cannot contain child elements")
+            closed = true
+        } else if (parserRawConsume(cursor, "{")) {
+            val value = parserParseAblaExpression(cursor)
+            parserRawExpect(cursor, "}")
+            result = mobileTemplateCall("mobileConcat", [
+                result,
+                mobileTemplateCall("mobileString", [value])
+            ])
+        } else {
+            val literal = parserRawTakeUntil(cursor, "<{")
+            if (literal != "") {
+                result = mobileTemplateCall("mobileConcat", [
+                    result,
+                    syntaxString(literal)
+                ])
+            }
+        }
+    }
+    mobileTemplateCall("mobileNormalizeText", [result])
+}
+
+compile fun mobileTemplateClose(cursor: ParserCursor, tag: string): void {
+    parserRawExpect(cursor, "</")
+    val closing = parserRawTakeName(cursor)
+    if (closing != tag) {
+        parserFail(cursor, "closing mobile tag does not match $tag")
+    }
+    parserRawSkipWhitespace(cursor)
+    parserRawExpect(cursor, ">")
+    return
+}
+
+compile fun mobileTemplateAction(
+    cursor: ParserCursor,
+    names: array<string>,
+    values: array<SyntaxExpression>,
+    braced: array<bool>,
+    attribute: string,
+    var actionIds: array<int>,
+    var actions: array<SyntaxExpression>
+): SyntaxExpression {
+    val index = mobileTemplateAttributeIndex(names, attribute)
+    if (index < 0) {
+        parserFail(cursor, "interactive mobile element requires $attribute")
+        return syntaxInteger(0)
+    }
+    if (!braced[index]) {
+        parserFail(cursor, "$attribute requires an {Abla action}")
+    }
+    val identifier = actions.size + 1
+    actionIds.append(identifier)
+    actions.append(values[index])
+    syntaxInteger(identifier)
+}
+
+compile fun mobileTemplateParseNode(
+    cursor: ParserCursor,
+    path: string,
+    var actionIds: array<int>,
+    var actions: array<SyntaxExpression>
+): SyntaxExpression {
+    parserRawSkipWhitespace(cursor)
+    parserRawExpect(cursor, "<")
+    val tag = parserRawTakeName(cursor)
+    if (!mobileTemplateKnownTag(tag)) {
+        parserFail(cursor, "unsupported mobile element: $tag")
+    }
+
+    val names: array<string> = []
+    val values: array<SyntaxExpression> = []
+    val braced: array<bool> = []
+    val selfClosing = mobileTemplateParseAttributes(
+        cursor,
+        tag,
+        names,
+        values,
+        braced
+    )
+    val key = mobileTemplateAttribute(
+        names,
+        values,
+        "key",
+        syntaxString("$tag-$path")
+    )
+
+    val children: array<SyntaxExpression> = []
+    var content = mobileTemplateAttribute(
+        names,
+        values,
+        "text",
+        syntaxString("")
+    )
+    if (!selfClosing) {
+        if (mobileTemplateIsTextual(tag)) {
+            content = mobileTemplateParseText(cursor, tag)
+        } else if (mobileTemplateIsContainer(tag)) {
+            var closed = false
+            var childIndex = 0
+            while (!closed) {
+                parserRawSkipWhitespace(cursor)
+                if (parserRawEnd(cursor)) {
+                    closed = true
+                    parserFail(cursor, "unterminated mobile $tag element")
+                } else if (parserRawAt(cursor, "</")) closed = true
+                else if (parserRawAt(cursor, "<")) {
+                    children.append(mobileTemplateParseNode(
+                        cursor,
+                        "$path.$childIndex",
+                        actionIds,
+                        actions
+                    ))
+                    childIndex = childIndex + 1
+                } else if (parserRawConsume(cursor, "{")) {
+                    children.append(parserParseAblaExpression(cursor))
+                    parserRawExpect(cursor, "}")
+                    childIndex = childIndex + 1
+                } else {
+                    val text = parserRawTakeUntil(cursor, "<{")
+                    if (!mobileTemplateWhitespace(text)) {
+                        parserFail(cursor, "$tag only accepts mobile child nodes")
+                    }
+                }
+            }
+        } else {
+            parserRawSkipWhitespace(cursor)
+            if (!parserRawAt(cursor, "</")) {
+                parserFail(cursor, "$tag does not accept child content")
+            }
+        }
+        mobileTemplateClose(cursor, tag)
+    }
+
+    var result = syntaxNull()
+    if (tag == "Screen") {
+        if (children.size != 1) {
+            parserFail(cursor, "Screen requires exactly one root child")
+        }
+        var root = mobileTemplateCall("mobileGroup", [syntaxArray([])])
+        if (children.size > 0) root = children[0]
+        result = mobileTemplateCall("mobileView", [
+            mobileTemplateAttribute(
+                names,
+                values,
+                "title",
+                syntaxString("Abla Mobile")
+            ),
+            mobileTemplateAttribute(
+                names,
+                values,
+                "dark",
+                syntaxBoolean(false)
+            ),
+            root
+        ])
+    }
+    if (tag == "Column") result = mobileTemplateCall("mobileColumn", [
+        key,
+        mobileTemplateAttribute(names, values, "padding", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "spacing", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "scroll", syntaxBoolean(false)),
+        syntaxArray(children)
+    ])
+    if (tag == "Row") result = mobileTemplateCall("mobileRow", [
+        key,
+        mobileTemplateAttribute(names, values, "spacing", syntaxInteger(0)),
+        syntaxArray(children)
+    ])
+    if (tag == "Text") result = mobileTemplateCall("mobileText", [
+        key,
+        content,
+        mobileTemplateAttribute(names, values, "style", syntaxString("body"))
+    ])
+    if (tag == "Button") result = mobileTemplateCall("mobileButton", [
+        key,
+        content,
+        mobileTemplateAction(
+            cursor, names, values, braced, "onTap", actionIds, actions
+        ),
+        mobileTemplateAttribute(names, values, "enabled", syntaxBoolean(true)),
+        mobileTemplateAttribute(
+            names, values, "appearance", syntaxString("filled")
+        )
+    ])
+    if (tag == "TextField") result = mobileTemplateCall("mobileTextField", [
+        key,
+        mobileTemplateAttribute(names, values, "label", syntaxString("")),
+        mobileTemplateAttribute(names, values, "value", syntaxString("")),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onChange", actionIds, actions
+        )
+    ])
+    if (tag == "Switch") result = mobileTemplateCall("mobileSwitch", [
+        key,
+        mobileTemplateAttribute(names, values, "label", syntaxString("")),
+        mobileTemplateAttribute(names, values, "checked", syntaxBoolean(false)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onChange", actionIds, actions
+        )
+    ])
+    if (tag == "Checkbox") result = mobileTemplateCall("mobileCheckbox", [
+        key,
+        mobileTemplateAttribute(names, values, "label", syntaxString("")),
+        mobileTemplateAttribute(names, values, "checked", syntaxBoolean(false)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onChange", actionIds, actions
+        )
+    ])
+    if (tag == "Slider") result = mobileTemplateCall("mobileSlider", [
+        key,
+        mobileTemplateAttribute(names, values, "label", syntaxString("")),
+        mobileTemplateAttribute(names, values, "value", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "minimum", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "maximum", syntaxInteger(100)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onChange", actionIds, actions
+        )
+    ])
+    if (tag == "Progress") result = mobileTemplateCall("mobileProgress", [
+        key,
+        mobileTemplateAttribute(names, values, "value", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "maximum", syntaxInteger(100)),
+        mobileTemplateAttribute(
+            names, values, "circular", syntaxBoolean(false)
+        )
+    ])
+    if (tag == "Divider") result = mobileTemplateCall("mobileDivider", [key])
+    if (tag == "Spacer") result = mobileTemplateCall("mobileSpacer", [
+        key,
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(8))
+    ])
+    if (tag == "Card") result = mobileTemplateCall("mobileCard", [
+        key,
+        mobileTemplateAttribute(names, values, "title", syntaxString("")),
+        syntaxArray(children)
+    ])
+    if (tag == "Chip") result = mobileTemplateCall("mobileChip", [
+        key,
+        if (mobileTemplateAttributeIndex(names, "text") >= 0)
+            mobileTemplateAttribute(names, values, "text", syntaxString(""))
+        else content,
+        mobileTemplateAttribute(names, values, "selected", syntaxBoolean(false)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onTap", actionIds, actions
+        ),
+        mobileTemplateAttribute(names, values, "payload", syntaxString(""))
+    ])
+    if (tag == "List") result = mobileTemplateCall("mobileList", [
+        key,
+        syntaxArray(children)
+    ])
+    if (tag == "If") result = syntaxIf(
+        mobileTemplateAttribute(
+            names, values, "condition", syntaxBoolean(false)
+        ),
+        mobileTemplateCall("mobileGroup", [syntaxArray(children)]),
+        mobileTemplateCall("mobileGroup", [syntaxArray([])])
+    )
+
+    val visibleIndex = mobileTemplateAttributeIndex(names, "visible")
+    if (visibleIndex >= 0 && tag != "Screen") {
+        result = syntaxIf(
+            values[visibleIndex],
+            result,
+            mobileTemplateCall("mobileGroup", [syntaxArray([])])
+        )
+    }
+    result
+}
+
+compile fun mobileTemplateParse(cursor: ParserCursor): SyntaxExpression {
+    val actionIds: array<int> = []
+    val actions: array<SyntaxExpression> = []
+    val view = mobileTemplateParseNode(cursor, "0", actionIds, actions)
+
+    val statements: array<SyntaxExpression> = []
+    var action = 0
+    while (action < actions.size) {
+        statements.append(syntaxIf(
+            syntaxBinary(
+                "==",
+                syntaxIdentifier("event"),
+                syntaxInteger(actionIds[action])
+            ),
+            syntaxBlock([actions[action], syntaxInteger(0)]),
+            syntaxInteger(0)
+        ))
+        action = action + 1
+    }
+    statements.append(view)
+    syntaxInferredLambda(
+        ["event", "value"],
+        syntaxBlock(statements),
+        false
+    )
+}
+
+#compilerRegisterSubparser("mobile", mobileTemplateParse)

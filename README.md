@@ -4,19 +4,20 @@ Abla Mobile is an Android framework for writing application state, rendering,
 and event logic in [Abla](https://github.com/AndreBaltazar8/ablac) while using a
 reusable Jetpack Compose host.
 
-The Android developer preview is functional. It builds and installs an
-ARM64 APK, renders a useful Material 3 component set, sends events back to a
-process-long Abla program, collects managed memory under sustained input, and
-lets Abla request bounded Android effects. Application modules contain no
-Kotlin source.
+The Android developer preview is functional. Apps define views and actions in
+the XML-like `$mobile` language and start them with one `mobileRun` call. It
+builds and installs an ARM64 APK, renders a useful Material 3 component set,
+sends events to a process-long Abla state-machine closure, collects managed
+memory under sustained input, and lets Abla request bounded Android effects.
+Application modules contain no Kotlin source.
 
 ## Architecture
 
-There is one `abla_mobile_run()` call per Android process. It owns any number
-of ordinary Abla variables for its entire lifetime. The app calls importable
-Abla Mobile functions such as `mobilePublishTree()`, `mobileWaitEvent()`,
-`mobileToast()`, and `mobileCopyText()`; those functions use mobile-owned
-`extern:"c"` implementations linked into `libabla_app.so`.
+There is one `abla_mobile_run()` call per Android process. A `$mobile` template
+becomes an ordinary capturing `FnMut` state machine, so it owns any number of
+ordinary Abla variables for its entire lifetime. `mobileRun` handles event
+dispatch and tree publication. Importable Abla Mobile functions use
+mobile-owned `extern:"c"` implementations linked into `libabla_app.so`.
 
 Kotlin receives only validated immutable presentation trees and copied event
 or effect payloads. It never receives an Abla application, state, object,
@@ -61,6 +62,7 @@ then from this repository run:
 ```sh
 ./tools/test-native-loop.sh
 ./tools/test-ui-tree.sh
+./tools/test-mobile-template.sh
 ./tools/test-showcase-host.sh
 ./tools/build-showcase-android.sh
 ```
@@ -87,48 +89,51 @@ any `.kt` file.
 
 ## Creating another app
 
-Use `examples/showcase` as the preview template:
+The repository is an Abla package (`abla-mobile`, entry `src/mobile.ab`). A
+locked package can import it with `import github("AndreBaltazar8/abla-mobile")`;
+a checkout can import `path/to/abla-mobile/src/mobile.ab` directly.
 
-1. Write the process-long entry in Abla and export it as `abla_mobile_run`.
-2. Build an Android ARM64 object with `mobileBuildAndroidArm64Object()`.
-3. Point the app module's CMake configuration at that object.
-4. Depend on `:runtime:android-host`; do not add application Kotlin.
-
-The minimum event loop is:
+The minimum app is:
 
 ```abla
 import "abla/build"
-import "path/to/abla-mobile/src/protocol.ab"
-import "path/to/abla-mobile/src/runtime.ab"
-import "path/to/abla-mobile/src/ui.ab"
+import "path/to/abla-mobile/src/mobile.ab"
 
 fun application(): int {
-    mobileConfigureRuntime(268435456)
-    var revision = 0
     var count = 0
-    while (true) {
-        revision = revision + 1
-        mobilePublishTree(mobileEncodeTree(
-            revision,
-            "Counter",
-            false,
-            mobileColumn("root", 20, 12, false, [
-                mobileText("count", "$count", "display"),
-                mobileButton("increment", "+1", 1, true, "filled")
-            ])
-        ))
-        mobileRuntimeSafepoint()
-        val event = mobileWaitEvent()
-        val eventRevision = mobileEventRevision()
-        if (eventRevision > 0 && eventRevision <= revision && event == 1) {
-            count = count + 1
-        }
-    }
-    0
+    var name = "Abla"
+
+    mobileRun($mobile
+        <Screen title="Counter">
+            <Column padding={20} spacing={12}>
+                <Text style="display">Count: {count}</Text>
+                <Button onTap={count = count + 1}>Increment</Button>
+                <TextField
+                    label="Name"
+                    value={name}
+                    onChange={name = value}
+                />
+                <Text>Hello, {name}!</Text>
+            </Column>
+        </Screen>
+    )
 }
 
 val exported = #exportFunction("application", "abla_mobile_run")
 ```
+
+Use `examples/showcase` as the Android packaging template:
+
+1. Define state, a `$mobile` tree, and inline actions in one `mobileRun` call;
+   export that Abla function as `abla_mobile_run`.
+2. Build an Android ARM64 object with `mobileBuildAndroidArm64Object()`.
+3. Point the app module's CMake configuration at that object.
+4. Depend on `:runtime:android-host`; do not add application Kotlin.
+
+See [mobile templates](docs/mobile-templates.md) for the grammar, complete
+element/attribute table, action payload rules, dynamic child groups, and
+lowering contract. The underlying builder API remains available for reusable
+view functions and programmatically generated child groups.
 
 ## Preview limits
 
@@ -142,8 +147,8 @@ val exported = #exportFunction("application", "abla_mobile_run")
   developer preview rather than a production-safety claim.
 - Persistence, permissions, networking/RPC orchestration, timers, images,
   dialogs, and custom native component registries remain future modules.
-- The builder API is the supported source surface. A `$mobile` parser can be
-  added later as syntax sugar without changing ownership or runtime behavior.
+- `$mobile` performs event-boundary whole-root rerendering. Background work
+  still needs a future task/completion API to trigger serialized invalidation.
 
 See [the design specification](docs/design-spec.md), [protocol](docs/protocol.md),
 and [implementation plan](plan.md) for the exact contracts and remaining work.

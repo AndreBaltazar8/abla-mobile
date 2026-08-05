@@ -1,0 +1,100 @@
+import "abla/build"
+import "../../src/mobile.ab"
+
+fun mobileTemplateApplication(): int {
+    var count = 1
+    var name = "Abla"
+    var enabled = true
+    var checked = false
+    var volume = 25
+    var selected = false
+    var showDetails = true
+    var status = "Waiting"
+
+    mobileRun($mobile
+        <Screen title={"Template $name"} dark={selected}>
+            <Column key="root" padding={20} spacing={12} scroll>
+                <Text key="headline" style="headline">
+                    Hello {name}
+                </Text>
+                <Card key="state-card" title="Independent Abla state">
+                    <Text key="count" style="display">Count: {count}</Text>
+                    <Row key="count-actions" spacing={8}>
+                        <Button
+                            key="increment"
+                            appearance="filled"
+                            onTap={count = count + 1; status = "Incremented"}
+                        >Increment</Button>
+                    </Row>
+                    <TextField
+                        key="name"
+                        label="Name"
+                        value={name}
+                        onChange={name = value}
+                    />
+                    <Switch
+                        key="enabled"
+                        label="Enabled"
+                        checked={enabled}
+                        onChange={enabled = mobilePayloadBool(value)}
+                    />
+                    <Checkbox
+                        key="checked"
+                        label="Checked"
+                        checked={checked}
+                        onChange={checked = mobilePayloadBool(value)}
+                    />
+                    <Slider
+                        key="volume"
+                        label={"Volume $volume"}
+                        value={volume}
+                        minimum={0}
+                        maximum={100}
+                        onChange={volume = mobilePayloadInt(value, volume)}
+                    />
+                    <Progress
+                        key="volume-progress"
+                        value={volume}
+                        maximum={100}
+                    />
+                    <Progress key="busy" value={1} maximum={1} circular />
+                </Card>
+                <Divider key="divider" />
+                <Text key="status" style="label">{status}</Text>
+                <Row key="toggles" spacing={8}>
+                    <Chip
+                        key="selection"
+                        selected={selected}
+                        payload="selection"
+                        onTap={selected = !selected}
+                    >Selected</Chip>
+                    <Button
+                        key="details-toggle"
+                        appearance="outlined"
+                        onTap={showDetails = !showDetails}
+                    >Toggle details</Button>
+                </Row>
+                <Text key="selected-copy" visible={selected}>
+                    Selected state is visible
+                </Text>
+                <If condition={showDetails}>
+                    <Card key="details" title="Conditional template">
+                        <Text key="details-copy">Conditional detail</Text>
+                    </Card>
+                </If>
+                <List key="items">
+                    <Text key="first-item">First static item</Text>
+                    {mobileGroup([
+                        mobileText("dynamic-item", "Dynamic child group", "body")
+                    ])}
+                </List>
+                <Spacer key="bottom-space" height={24} />
+            </Column>
+        </Screen>
+    )
+}
+
+val mobileTemplateExported = #exportFunction(
+    "mobileTemplateApplication",
+    "abla_mobile_run"
+)

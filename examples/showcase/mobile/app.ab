@@ -1,272 +1,27 @@
 import "abla/build"
-import "../../../src/protocol.ab"
+import "../../../src/mobile.ab"
 import "../../../src/platform.ab"
-import "../../../src/runtime.ab"
-import "../../../src/ui.ab"
 
-compile val eventIncrement = 1
-compile val eventDecrement = 2
-compile val eventReset = 3
-compile val eventName = 4
-compile val eventDarkTheme = 5
-compile val eventNotifications = 6
-compile val eventVolume = 7
-compile val eventSection = 8
-compile val eventAddItem = 9
-compile val eventRemoveItem = 10
-compile val eventAdvance = 11
-compile val eventCelebrate = 12
-compile val eventToast = 13
-compile val eventCopy = 14
-compile val eventHaptic = 15
-compile val eventOpenUrl = 16
-
-fun showcaseParseInt(text: string, fallback: int): int {
-    var valid = text.size > 0
-    var value = 0
-    var index = 0
-    while (valid && index < text.size) {
-        val byte = text[index]
-        if (byte < 48 || byte > 57) valid = false
-        if (valid) value = value * 10 + byte - 48
-        index = index + 1
-    }
-    if (valid) value else fallback
-}
-
-fun showcaseRender(
-    revision: int,
-    count: int,
-    name: string,
-    darkTheme: bool,
-    notifications: bool,
-    volume: int,
-    section: int,
-    itemCount: int,
-    progress: int,
-    status: string
-): string {
-    val sections: array<MobileNode> = [
-        mobileChip(
-            "section-controls",
-            "Controls",
-            section == 0,
-            #eventSection,
-            "0"
-        ),
-        mobileChip(
-            "section-lists",
-            "Lists",
-            section == 1,
-            #eventSection,
-            "1"
-        ),
-        mobileChip(
-            "section-about",
-            "About",
-            section == 2,
-            #eventSection,
-            "2"
-        )
-    ]
-
-    val counterButtons: array<MobileNode> = [
-        mobileButton(
-            "decrement",
-            "−1",
-            #eventDecrement,
-            true,
-            "outlined"
-        ),
-        mobileButton(
-            "increment",
-            "+1",
-            #eventIncrement,
-            true,
-            "filled"
-        ),
-        mobileButton(
-            "reset",
-            "Reset",
-            #eventReset,
-            count != 0,
-            "text"
-        )
-    ]
-
-    val controls: array<MobileNode> = [
-        mobileCard("counter-card", "Reactive counter", [
-            mobileText("count", "$count", "display"),
-            mobileRow("counter-actions", 8, counterButtons)
-        ]),
-        mobileCard("input-card", "Input and preferences", [
-            mobileTextField("name", "Your name", name, #eventName),
-            mobileText(
-                "greeting",
-                if (name == "") "Type a name above" else "Hello, $name!",
-                "body"
-            ),
-            mobileSwitch(
-                "dark-theme",
-                "Dark theme",
-                darkTheme,
-                #eventDarkTheme
-            ),
-            mobileCheckbox(
-                "notifications",
-                "Enable notifications",
-                notifications,
-                #eventNotifications
-            ),
-            mobileSlider(
-                "volume",
-                "Volume: $volume%",
-                volume,
-                0,
-                100,
-                #eventVolume
-            )
-        ]),
-        mobileCard("progress-card", "Progress", [
-            mobileProgress("linear-progress", progress, 100, false),
-            mobileRow("progress-actions", 8, [
-                mobileButton(
-                    "advance",
-                    "Advance",
-                    #eventAdvance,
-                    true,
-                    "filled"
-                ),
-                mobileButton(
-                    "celebrate",
-                    "Celebrate",
-                    #eventCelebrate,
-                    progress >= 100,
-                    "outlined"
-                )
-            ])
-        ])
-    ]
-
-    val listItems: array<MobileNode> = []
+fun showcaseItems(itemCount: int): MobileNode {
+    val items: array<MobileNode> = []
     var item = 0
     while (item < itemCount) {
-        listItems.append(mobileCard("item-$item", "Item ${item + 1}", [
+        items.append(mobileCard("item-$item", "Item ${item + 1}", [
             mobileText(
                 "item-$item-detail",
-                "Rendered from an Abla array at revision $revision",
+                "Rendered from an Abla array",
                 "body"
             )
         ]))
         item = item + 1
     }
-    val lists: array<MobileNode> = [
-        mobileRow("list-actions", 8, [
-            mobileButton(
-                "add-item",
-                "Add item",
-                #eventAddItem,
-                itemCount < 20,
-                "filled"
-            ),
-            mobileButton(
-                "remove-item",
-                "Remove item",
-                #eventRemoveItem,
-                itemCount > 0,
-                "outlined"
-            )
-        ]),
-        mobileText(
-            "list-count",
-            "$itemCount stable keyed items",
-            "body"
-        ),
-        mobileList("showcase-list", listItems)
-    ]
-
-    val about: array<MobileNode> = [
-        mobileCard("architecture", "Everything important is Abla", [
-            mobileText(
-                "architecture-copy",
-                "Counter, text, preferences, progress, navigation and list state are independent Abla variables. Android receives only this immutable presentation tree.",
-                "body"
-            ),
-            mobileText(
-                "platform-copy",
-                "These buttons ask Android to act through bounded copied messages.",
-                "body"
-            ),
-            mobileRow("platform-actions", 8, [
-                mobileButton(
-                    "toast",
-                    "Toast",
-                    #eventToast,
-                    true,
-                    "filled"
-                ),
-                mobileButton(
-                    "copy",
-                    "Copy",
-                    #eventCopy,
-                    true,
-                    "outlined"
-                ),
-                mobileButton(
-                    "haptic",
-                    "Haptic",
-                    #eventHaptic,
-                    true,
-                    "text"
-                )
-            ]),
-            mobileButton(
-                "open-url",
-                "Open Abla on GitHub",
-                #eventOpenUrl,
-                true,
-                "outlined"
-            )
-        ]),
-        mobileProgress("busy-indicator", 1, 1, true),
-        mobileText(
-            "revision",
-            "Presentation revision $revision",
-            "label"
-        )
-    ]
-
-    val content = if (section == 0) controls else
-        if (section == 1) lists else about
-    val rootChildren: array<MobileNode> = [
-        mobileText("app-title", "Abla Mobile Showcase", "headline"),
-        mobileText("status", status, "label"),
-        mobileRow("sections", 8, sections),
-        mobileDivider("top-divider")
-    ]
-    var contentIndex = 0
-    while (contentIndex < content.size) {
-        rootChildren.append(content[contentIndex])
-        contentIndex = contentIndex + 1
-    }
-    rootChildren.append(mobileSpacer("bottom-space", 40))
-
-    mobileEncodeTree(
-        revision,
-        "Abla Mobile",
-        darkTheme,
-        mobileColumn("root", 20, 14, true, rootChildren)
-    )
+    mobileGroup(items)
 }
 
-// One process-long call owns every application variable. Importable Abla
-// Mobile functions reach its native runtime through arbitrary C externs; the
-// entrypoint exports no callback, application object, or state handle.
+// This one call captures every application variable. `$mobile` lowers the
+// template and its inline actions to an ordinary Abla FnMut state machine;
+// Android receives only immutable presentation trees and copied event data.
 fun showcaseMobileRun(): int {
-    // The importable mobile runtime owns the managed limit and explicit
-    // safepoint used by this process-long exported call.
-    mobileConfigureRuntime(268435456)
-    var revision = 0
     var count = 0
     var name = "Abla"
     var darkTheme = false
@@ -276,109 +31,229 @@ fun showcaseMobileRun(): int {
     var itemCount = 4
     var progress = 20
     var status = "Running entirely from Abla"
-    var running = true
 
-    while (running) {
-        revision = revision + 1
-        val tree = showcaseRender(
-            revision,
-            count,
-            name,
-            darkTheme,
-            notifications,
-            volume,
-            section,
-            itemCount,
-            progress,
-            status
-        )
+    mobileRun($mobile
+        <Screen title="Abla Mobile" dark={darkTheme}>
+            <Column key="root" padding={20} spacing={14} scroll>
+                <Text key="app-title" style="headline">
+                    Abla Mobile Showcase
+                </Text>
+                <Text key="status" style="label">{status}</Text>
+                <Row key="sections" spacing={8}>
+                    <Chip
+                        key="section-controls"
+                        selected={section == 0}
+                        payload="0"
+                        onTap={
+                            section = 0;
+                            status = "Section navigation handled by Abla"
+                        }
+                    >Controls</Chip>
+                    <Chip
+                        key="section-lists"
+                        selected={section == 1}
+                        payload="1"
+                        onTap={
+                            section = 1;
+                            status = "Section navigation handled by Abla"
+                        }
+                    >Lists</Chip>
+                    <Chip
+                        key="section-about"
+                        selected={section == 2}
+                        payload="2"
+                        onTap={
+                            section = 2;
+                            status = "Section navigation handled by Abla"
+                        }
+                    >About</Chip>
+                </Row>
+                <Divider key="top-divider" />
 
-        mobilePublishTree(tree)
-        mobileRuntimeSafepoint()
+                <If condition={section == 0}>
+                    <Card key="counter-card" title="Reactive counter">
+                        <Text key="count" style="display">{count}</Text>
+                        <Row key="counter-actions" spacing={8}>
+                            <Button
+                                key="decrement"
+                                appearance="outlined"
+                                onTap={
+                                    count = count - 1;
+                                    status = "Counter decremented in Abla"
+                                }
+                            >−1</Button>
+                            <Button
+                                key="increment"
+                                appearance="filled"
+                                onTap={
+                                    count = count + 1;
+                                    status = "Counter incremented in Abla"
+                                }
+                            >+1</Button>
+                            <Button
+                                key="reset"
+                                appearance="text"
+                                enabled={count != 0}
+                                onTap={
+                                    count = 0;
+                                    status = "Counter reset"
+                                }
+                            >Reset</Button>
+                        </Row>
+                    </Card>
 
-        val event = mobileWaitEvent()
-        val eventRevision = mobileEventRevision()
-        val payload = mobileEventPayload()
+                    <Card key="input-card" title="Input and preferences">
+                        <TextField
+                            key="name"
+                            label="Your name"
+                            value={name}
+                            onChange={
+                                name = value;
+                                status = "Text input round-tripped through Abla"
+                            }
+                        />
+                        <Text key="greeting">Hello, {name}!</Text>
+                        <Switch
+                            key="dark-theme"
+                            label="Dark theme"
+                            checked={darkTheme}
+                            onChange={
+                                darkTheme = mobilePayloadBool(value);
+                                status = if (darkTheme)
+                                    "Dark theme enabled"
+                                else "Light theme enabled"
+                            }
+                        />
+                        <Checkbox
+                            key="notifications"
+                            label="Enable notifications"
+                            checked={notifications}
+                            onChange={
+                                notifications = mobilePayloadBool(value);
+                                status = if (notifications)
+                                    "Notifications enabled"
+                                else "Notifications disabled"
+                            }
+                        />
+                        <Slider
+                            key="volume"
+                            label={"Volume: $volume%"}
+                            value={volume}
+                            minimum={0}
+                            maximum={100}
+                            onChange={
+                                volume = mobilePayloadInt(value, volume);
+                                status = "Slider updated Abla state"
+                            }
+                        />
+                    </Card>
 
-        if (event == 0) running = false
-        // A widget can enqueue several edits (IME composition or slider
-        // movement) before the next tree reaches Compose. Event identifiers
-        // are stable semantic commands, so accept any already-published
-        // revision and reject only malformed/future input.
-        if (eventRevision > 0 && eventRevision <= revision) {
-            if (event == #eventIncrement) {
-                count = count + 1
-                status = "Counter incremented in Abla"
-            }
-            if (event == #eventDecrement) {
-                count = count - 1
-                status = "Counter decremented in Abla"
-            }
-            if (event == #eventReset) {
-                count = 0
-                status = "Counter reset"
-            }
-            if (event == #eventName) {
-                name = payload
-                status = "Text input round-tripped through Abla"
-            }
-            if (event == #eventDarkTheme) {
-                darkTheme = payload == "true"
-                status = if (darkTheme) "Dark theme enabled" else
-                    "Light theme enabled"
-            }
-            if (event == #eventNotifications) {
-                notifications = payload == "true"
-                status = if (notifications) "Notifications enabled" else
-                    "Notifications disabled"
-            }
-            if (event == #eventVolume) {
-                volume = showcaseParseInt(payload, volume)
-                if (volume < 0) volume = 0
-                if (volume > 100) volume = 100
-                status = "Slider updated Abla state"
-            }
-            if (event == #eventSection) {
-                section = showcaseParseInt(payload, section)
-                status = "Section navigation handled by Abla"
-            }
-            if (event == #eventAddItem && itemCount < 20) {
-                itemCount = itemCount + 1
-                status = "Added a keyed item"
-            }
-            if (event == #eventRemoveItem && itemCount > 0) {
-                itemCount = itemCount - 1
-                status = "Removed a keyed item"
-            }
-            if (event == #eventAdvance) {
-                progress = progress + 10
-                if (progress > 100) progress = 0
-                status = "Progress advanced"
-            }
-            if (event == #eventCelebrate && progress >= 100) {
-                status = "🎉 Abla drove this whole screen!"
-            }
-            if (event == #eventToast) {
-                mobileToast("Hello from Abla")
-                status = "Abla requested an Android toast"
-            }
-            if (event == #eventCopy) {
-                mobileCopyText("Copied by Abla Mobile")
-                status = "Abla copied text through Android"
-            }
-            if (event == #eventHaptic) {
-                mobileHaptic()
-                status = "Abla requested Android haptics"
-            }
-            if (event == #eventOpenUrl) {
-                mobileOpenUrl(
-                    "https://github.com/AndreBaltazar8/abla"
-                )
-                status = "Abla requested a safe browser intent"
-            }
-        }
-    }
-    0
+                    <Card key="progress-card" title="Progress">
+                        <Progress
+                            key="linear-progress"
+                            value={progress}
+                            maximum={100}
+                        />
+                        <Row key="progress-actions" spacing={8}>
+                            <Button
+                                key="advance"
+                                onTap={
+                                    progress = if (progress >= 100)
+                                        0 else progress + 10;
+                                    status = "Progress advanced"
+                                }
+                            >Advance</Button>
+                            <Button
+                                key="celebrate"
+                                appearance="outlined"
+                                enabled={progress >= 100}
+                                onTap={status = "Abla drove this whole screen!"}
+                            >Celebrate</Button>
+                        </Row>
+                    </Card>
+                </If>
+
+                <If condition={section == 1}>
+                    <Row key="list-actions" spacing={8}>
+                        <Button
+                            key="add-item"
+                            enabled={itemCount < 20}
+                            onTap={
+                                itemCount = if (itemCount < 20)
+                                    itemCount + 1 else itemCount;
+                                status = "Added a keyed item"
+                            }
+                        >Add item</Button>
+                        <Button
+                            key="remove-item"
+                            appearance="outlined"
+                            enabled={itemCount > 0}
+                            onTap={
+                                itemCount = if (itemCount > 0)
+                                    itemCount - 1 else itemCount;
+                                status = "Removed a keyed item"
+                            }
+                        >Remove item</Button>
+                    </Row>
+                    <Text key="list-count">{itemCount} stable keyed items</Text>
+                    <List key="showcase-list">
+                        {showcaseItems(itemCount)}
+                    </List>
+                </If>
+
+                <If condition={section == 2}>
+                    <Card key="architecture" title="Everything important is Abla">
+                        <Text key="architecture-copy">
+                            Counter, text, preferences, progress, navigation and
+                            list state are independent Abla variables. Android
+                            receives only this immutable presentation tree.
+                        </Text>
+                        <Text key="platform-copy">
+                            These buttons ask Android to act through bounded
+                            copied messages.
+                        </Text>
+                        <Row key="platform-actions" spacing={8}>
+                            <Button
+                                key="toast"
+                                onTap={
+                                    mobileToast("Hello from Abla");
+                                    status = "Abla requested an Android toast"
+                                }
+                            >Toast</Button>
+                            <Button
+                                key="copy"
+                                appearance="outlined"
+                                onTap={
+                                    mobileCopyText("Copied by Abla Mobile");
+                                    status = "Abla copied text through Android"
+                                }
+                            >Copy</Button>
+                            <Button
+                                key="haptic"
+                                appearance="text"
+                                onTap={
+                                    mobileHaptic();
+                                    status = "Abla requested Android haptics"
+                                }
+                            >Haptic</Button>
+                        </Row>
+                        <Button
+                            key="open-url"
+                            appearance="outlined"
+                            onTap={
+                                mobileOpenUrl(
+                                    "https://github.com/AndreBaltazar8/abla"
+                                );
+                                status = "Abla requested a safe browser intent"
+                            }
+                        >Open Abla on GitHub</Button>
+                    </Card>
+                    <Progress key="busy-indicator" value={1} maximum={1} circular />
+                </If>
+                <Spacer key="bottom-space" height={40} />
+            </Column>
+        </Screen>
+    )
 }
 
 val showcaseMobileRunExported = #exportFunction(

@@ -14,6 +14,29 @@ fun mobileProperties(keys: array<string>, values: array<Json>): Json =
 
 fun mobileEmptyProperties(): Json = jsonObject([], [])
 
+// Groups let a dynamic template child contribute zero or many nodes. They are
+// flattened by containers and never cross the host boundary.
+fun mobileGroup(children: array<MobileNode>): MobileNode =
+    MobileNode("__group", "", mobileEmptyProperties(), children)
+
+fun mobileFlattenChildren(children: array<MobileNode>): array<MobileNode> {
+    val flattened: array<MobileNode> = []
+    var index = 0
+    while (index < children.size) {
+        val child = children[index]
+        if (child.kind == "__group") {
+            val nested = mobileFlattenChildren(child.children)
+            var nestedIndex = 0
+            while (nestedIndex < nested.size) {
+                flattened.append(nested[nestedIndex])
+                nestedIndex = nestedIndex + 1
+            }
+        } else flattened.append(child)
+        index = index + 1
+    }
+    flattened
+}
+
 fun mobileColumn(
     key: string,
     padding: int,
@@ -27,7 +50,7 @@ fun mobileColumn(
         ["padding", "spacing", "scroll"],
         [jsonInteger(padding), jsonInteger(spacing), jsonBoolean(scroll)]
     ),
-    children
+    mobileFlattenChildren(children)
 )
 
 fun mobileRow(
@@ -38,7 +61,7 @@ fun mobileRow(
     "row",
     key,
     mobileProperties(["spacing"], [jsonInteger(spacing)]),
-    children
+    mobileFlattenChildren(children)
 )
 
 fun mobileText(
@@ -169,7 +192,7 @@ fun mobileCard(
     "card",
     key,
     mobileProperties(["title"], [jsonString(title)]),
-    children
+    mobileFlattenChildren(children)
 )
 
 fun mobileChip(
@@ -193,7 +216,7 @@ fun mobileList(
     key: string,
     children: array<MobileNode>
 ): MobileNode = MobileNode(
-    "list", key, mobileEmptyProperties(), children
+    "list", key, mobileEmptyProperties(), mobileFlattenChildren(children)
 )
 
 fun mobileNodeJson(node: MobileNode): Json {
@@ -220,4 +243,3 @@ fun mobileEncodeTree(
     [jsonInteger(1), jsonInteger(revision), jsonString(title),
      jsonBoolean(darkTheme), mobileNodeJson(root)]
 ))
-

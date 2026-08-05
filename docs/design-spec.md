@@ -1,6 +1,6 @@
 # Abla Mobile design specification
 
-Status: Android developer preview implemented
+Status: Template-driven Android developer preview implemented
 Last updated: 2026-08-05
 
 ## 1. Product definition
@@ -19,6 +19,7 @@ The Android process contains:
 ```text
 libabla_app.so
   process-long abla_mobile_run()
+  `$mobile` state-machine closure and inline actions
   arbitrary Abla locals/objects/arrays/closures
   semantic UI builders and event logic
   Abla Mobile C transport, allocator, collector, and platform-effect queue
@@ -60,7 +61,10 @@ native libraries; it is not an application or state handle.
 
 The host loads `libabla_app.so`, resolves the fixed platform ABI, installs its
 native transport, and starts `abla_mobile_run()` once on a detached native
-thread. The call is expected to remain active for the Android process lifetime.
+thread. An app normally exports a function containing one
+`mobileRun($mobile ...)` call. The subparser-produced closure captures every
+local referenced by its view or actions, and the call remains active for the
+Android process lifetime.
 
 Ordinary locals in that call are compiler-rooted at the framework's explicit
 memory safepoint. `mobileRuntimeSafepoint()` keeps a reachable collection call
@@ -84,8 +88,9 @@ The preview uses event-boundary whole-root rendering:
 Compose interaction
   -> native event queue copies revision, event ID, and payload
   -> mobileWaitEvent() resumes the serialized Abla loop
-  -> Abla mutates any variables needed by that event
-  -> the loop builds and publishes revision N + 1
+  -> the generated `$mobile` dispatcher runs the matching inline action
+  -> the closure reevaluates the view from all current captured variables
+  -> mobileRun publishes revision N + 1
   -> host validates and replaces its UiTree StateFlow value
   -> Compose recomposes the generic renderer
 ```
@@ -99,7 +104,25 @@ The framework cannot observe arbitrary unsynchronized mutations. Work outside
 the serialized event loop will require a future mobile task/completion API or
 an explicit invalidation message.
 
-## 5. Abla API
+## 5. Abla API and template language
+
+`src/mobile.ab` is the package entry and supported application surface. It
+registers the `$mobile` subparser and defines `mobileRun`. A template lowers to
+a context-typed two-parameter closure: event zero renders, while a positive
+event executes its source-order action and then returns the rebuilt
+`MobileView`. `value` is the copied event payload visible to `onChange`.
+
+Views use XML-like `Screen`, layout, text, input, selection, progress, list,
+conditional, and decoration elements. Attributes accept quoted literals or
+`{Abla expressions}`; text accepts interpolation; actions accept
+semicolon-separated Abla expressions. Container expressions may return a node
+or a flattened `mobileGroup`. The complete grammar and element table are in
+[mobile-templates.md](mobile-templates.md).
+
+This surface creates no framework state object. Any number of ordinary locals,
+objects, arrays, or closures can be captured, read by view expressions, and
+mutated by actions. The underlying builder API remains public for reusable
+programmatic view functions.
 
 `src/ui.ab` defines immutable semantic nodes and protocol encoding:
 
@@ -122,11 +145,11 @@ haptic effects.
 
 These modules use ordinary `extern:"c"` declarations. Android-specific
 implementations live in this repository and link with the application object.
-No source or runtime modification in `ablac` is required.
-
-The builder API is normative for the developer preview. A future `$mobile`
-subparser is optional syntax sugar that must lower to these calls. It may not
-generate Compose code, invent a state object, or change the host boundary.
+The only required `ablac` change is a general parser-extension facility:
+`syntaxInferredLambda` constructs the same unknown-parameter syntax as a source
+lambda, and ordinary call-site analysis supplies its callable parameter types.
+This is not mobile-specific and still passes through normal capture, ownership,
+effect, semantic, and IR checks.
 
 ## 6. Android host
 
@@ -173,7 +196,8 @@ Hard limits include:
 An event contains the tree revision from which it originated. The preview
 accepts positive already-published revisions because IME/slider input can queue
 while newer presentations are arriving, and rejects malformed or future
-revisions. Event IDs are stable semantic integers chosen by the Abla app.
+revisions. `$mobile` assigns stable positive action identifiers in source
+traversal order; direct builder users can still choose explicit integers.
 
 ## 8. Platform effects
 
@@ -196,6 +220,24 @@ Future services that return valuesâ€”permissions, documents, media, or sensorsâ€
 must use copied request IDs and post copied completions into the serialized
 event loop. They may not store an Abla closure or state pointer.
 
+Android declarations remain package configuration rather than reactive UI.
+The application manifest declares install-time capabilities such as
+`android.permission.INTERNET`; networking code and its response state remain in
+Abla. Android's internet capability does not require a runtime prompt. The
+showcase manifest includes it as the packaging example.
+
+Likewise, the Android 12+ splash icon/background and post-splash theme belong
+to application theme resources and manifest metadata. They run before the
+first `$mobile` tree exists and do not create application state. The current
+showcase uses the platform's default splash derived from its label/theme;
+custom resource plumbing is a packaging extension, not a template node.
+
+Fire-and-forget intents extend the effect-kind table with an allowlisted copied
+payload. Result-bearing intents require a copied request identifier plus a
+completion event in the same serialized queue. Share/email/dial/maps effects,
+permission requests, and document/media pickers are not implemented in this
+preview and must not be emulated by passing a callback across JNI.
+
 ## 9. Target/runtime integration
 
 `src/android_build.ab` defines the AArch64 Android target and emits the Abla
@@ -207,9 +249,9 @@ application object. `runtime/native/CMakeLists.txt` links it with:
 - a pointer-only value bridge; and
 - an AArch64 LLVM ABI shim matching emitted `sret`/`byval` value declarations.
 
-The target adapter belongs to Abla Mobile. `../ablac` remains unchanged. A new
-compiler RFC is justified only if a capability needed by multiple targets is
-actually absent; no RFC is needed for the current Android preview.
+The target adapter and mobile runtime belong to Abla Mobile. `ablac` needed no
+mobile runtime or Android special case. Its separate inferred-subparser-lambda
+RFC adds only the general initial-parser AST capability described above.
 
 ## 10. Packaging contract
 
@@ -231,13 +273,15 @@ The Android preview is accepted when all of these pass:
 1. native loop test proves multiple Abla locals, rerendering, no callback or
    handle in the exported ABI;
 2. UI codec tests cover the complete node surface;
-3. host showcase test publishes a real tree from compiled Abla;
-4. ARM64 object and APK build from clean sources;
-5. the application module contains no Kotlin;
-6. ADB test verifies initial render, event mutation, exact stress-event count,
+3. template test compiles `$mobile`, dispatches all standard payload kinds,
+   mutates seven independent captures, and verifies eight exact revisions;
+4. host showcase test publishes a real template-built tree from compiled Abla;
+5. ARM64 object and APK build from clean sources;
+6. the application module contains no Kotlin;
+7. ADB test verifies initial render, event mutation, exact stress-event count,
    GC under pressure, Android effect dispatch, and no fatal log;
-7. `../ablac` remains clean; and
-8. generated artifacts are excluded from the repository.
+8. `ablac`'s RFC implementation and full self-hosted suite pass; and
+9. generated artifacts are excluded from both repositories before publication.
 
 ## 12. Explicit preview limits and future work
 
@@ -252,7 +296,6 @@ yet for a production safety claim. Remaining independent extensions are:
 - persistence and state restoration;
 - Abla-owned HTTP/RPC convenience APIs;
 - binary tree encoding if profiling justifies it;
-- optional `$mobile` source syntax; and
 - iOS host and target integration.
 
 None of those items may introduce application Kotlin generation or a

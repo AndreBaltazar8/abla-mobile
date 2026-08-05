@@ -1,0 +1,9 @@
+import "../../src/mobile.ab"
+
+fun invalidMobileTemplate(): int {
+    mobileRun($mobile
+        <Screen>
+            <Button>Missing action</Button>
+        </Screen>
+    )
+}
