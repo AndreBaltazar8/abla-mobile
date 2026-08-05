@@ -1,0 +1,71 @@
+#ifndef ABLA_MOBILE_CORE_RENAME_H
+#define ABLA_MOBILE_CORE_RENAME_H
+
+/* Keep the portable implementation private. The public symbols below are
+ * supplied by the target-ABI LLVM shim, which forwards into a pointer-only C
+ * boundary owned by Abla Mobile. */
+#define abla_void abla_mobile_core_void
+#define abla_null abla_mobile_core_null
+#define abla_i64 abla_mobile_core_i64
+#define abla_bool abla_mobile_core_bool
+#define abla_string_static abla_mobile_core_string_static
+#define abla_function abla_mobile_core_function
+#define abla_closure abla_mobile_core_closure
+#define abla_generator_create abla_mobile_core_generator_create
+#define abla_generator_next abla_mobile_core_generator_next
+#define abla_generator_value abla_mobile_core_generator_value
+#define abla_generator_yield abla_mobile_core_generator_yield
+#define abla_generator_drop abla_mobile_core_generator_drop
+#define abla_task_create abla_mobile_core_task_create
+#define abla_task_drop abla_mobile_core_task_drop
+#define abla_thread_create abla_mobile_core_thread_create
+#define abla_thread_drop abla_mobile_core_thread_drop
+#define abla_await abla_mobile_core_await
+#define abla_as_i64 abla_mobile_core_as_i64
+#define abla_as_bool abla_mobile_core_as_bool
+#define abla_as_cstring abla_mobile_core_as_cstring
+#define abla_as_function abla_mobile_core_as_function
+#define abla_function_capture_count abla_mobile_core_function_capture_count
+#define abla_function_capture_pointer abla_mobile_core_function_capture_pointer
+#define abla_function_capture abla_mobile_core_function_capture
+#define abla_closure_release abla_mobile_core_closure_release
+#define abla_owned_bytes_from_value abla_mobile_core_owned_bytes_from_value
+#define abla_cell_create abla_mobile_core_cell_create
+#define abla_cell_get abla_mobile_core_cell_get
+#define abla_cell_set abla_mobile_core_cell_set
+#define abla_shared_create abla_mobile_core_shared_create
+#define abla_shared_clone abla_mobile_core_shared_clone
+#define abla_shared_get abla_mobile_core_shared_get
+#define abla_shared_lock abla_mobile_core_shared_lock
+#define abla_shared_unlock abla_mobile_core_shared_unlock
+#define abla_shared_release abla_mobile_core_shared_release
+#define abla_weak_create abla_mobile_core_weak_create
+#define abla_weak_clone abla_mobile_core_weak_clone
+#define abla_weak_upgrade abla_mobile_core_weak_upgrade
+#define abla_weak_alive abla_mobile_core_weak_alive
+#define abla_weak_release abla_mobile_core_weak_release
+#define abla_negate abla_mobile_core_negate
+#define abla_not abla_mobile_core_not
+#define abla_add abla_mobile_core_add
+#define abla_subtract abla_mobile_core_subtract
+#define abla_multiply abla_mobile_core_multiply
+#define abla_divide abla_mobile_core_divide
+#define abla_equal abla_mobile_core_equal
+#define abla_not_equal abla_mobile_core_not_equal
+#define abla_less abla_mobile_core_less
+#define abla_less_equal abla_mobile_core_less_equal
+#define abla_greater abla_mobile_core_greater
+#define abla_greater_equal abla_mobile_core_greater_equal
+#define abla_to_string abla_mobile_core_to_string
+#define abla_string_concat abla_mobile_core_string_concat
+#define abla_string_slice abla_mobile_core_string_slice
+#define abla_length abla_mobile_core_length
+#define abla_index_get abla_mobile_core_index_get
+#define abla_array_create abla_mobile_core_array_create
+#define abla_array_append abla_mobile_core_array_append
+#define abla_array_set abla_mobile_core_array_set
+#define abla_object_create abla_mobile_core_object_create
+#define abla_field_get abla_mobile_core_field_get
+#define abla_field_set abla_mobile_core_field_set
+
+#endif

@@ -1,7 +1,7 @@
 # Abla Mobile implementation plan
 
-Status: Draft  
-Updated: 2026-08-04  
+Status: In implementation
+Updated: 2026-08-05
 Primary target: Android  
 Later target: iOS
 
@@ -18,8 +18,8 @@ These are release gates, not optional optimizations:
 1. No application-specific Kotlin or Swift source is generated.
 2. Android uses a precompiled, versioned `abla-mobile-android.aar` containing
    the generic Compose renderer and fixed JNI bridge.
-3. The first release has one process-owned `MobileProgram`, rooted entirely by
-   the Abla runtime.
+3. The first release has one process-long Abla event-loop call. Its stack,
+   locals, closures, and managed allocations remain owned and rooted by Abla.
 4. No application/state/closure/object handle or pointer crosses into Kotlin.
 5. Stable node IDs, event IDs, tree revisions, and request IDs are inert routing
    values and never identify Abla memory.
@@ -43,32 +43,40 @@ explicit architecture revision.
 
 | Workstream | Repository/artifact | Responsibility |
 | --- | --- | --- |
-| Mobile program runtime | `ablac` runtime + `abla-mobile` | Process-owned program root, render/event closure lifetime, serialized executor, dirty scheduling. |
-| Fixed mobile ABI | `ablac` + `abla-mobile` | Fixed entrypoints/imports, copied bytes, status/errors, threading, panic behavior, manifests. |
+| Mobile program runtime | `abla-mobile` | Process-long event loop, runtime configuration, serialized events, rerender scheduling, allocation/collection, and Android panic policy. |
+| Fixed mobile ABI | `abla-mobile` | Existing Abla exports/externs plus mobile-owned copied bytes, status/errors, threading, and target adapter. |
 | Mobile language | `abla-mobile` | `$mobile` grammar, typed lowering to executable builders, keys, event IDs, diagnostics. |
 | UI protocol | `abla-mobile` | Immutable tree model, deterministic binary codec, limits, versioning, stale-event rules. |
 | Android host | `runtime/android-host` | Precompiled AAR, Activity/embedded composable, tree decoder, generic Compose renderer, lifecycle, registries. |
 | RPC | `ablac` standard library + `abla-mobile` | Contract projection, Abla client transport/codecs/tasks, generated server routes and schemas. |
 | Platform integration | Android host + user modules | Native components, services, permissions, lifecycle, user-owned Kotlin escape hatches. |
-| Verification | Both repositories | Compiler conformance, protocol fuzzing, Compose tests, JNI tests, packaging, determinism. |
+| Verification | `abla-mobile` (plus upstream conformance when relevant) | Protocol, Compose, JNI, packaging, target-adapter, and determinism tests. |
 
-Compose and Android SDK policy stays out of `ablac`. Runtime rooting, closure
-safety, fixed exports/imports, threading, and panic containment remain
-framework-neutral compiler/runtime capabilities where possible.
+Compose, Android SDK policy, allocation/collection policy, mobile entrypoints,
+and the Android value-ABI adapter stay in this repository. Abla Mobile uses the
+compiler's existing arbitrary `extern:"c"` calls, scalar/callback exports,
+target definition, object emission, managed root frames, and portable value
+implementation. It does not patch `ablac` or its runtime.
 
 ## 3. Dependencies and removed dependencies
 
-### 3.1 Compiler/runtime work required
+### 3.1 Existing compiler capabilities used unchanged
 
-| Capability | Blocks |
+| Capability | Use in Abla Mobile |
 | --- | --- |
-| Runtime-owned process mobile root | Retaining `MobileProgram` and arbitrary captured Abla state after startup. |
-| Safe retained `FnMut` closures | Executable render and event tables. |
-| Fixed Android exports/imports | Host startup, dispatch, tree publication, effects, and errors. |
-| Serialized completion queue | Local events, timers, RPC, and platform-service completions mutating the same state safely. |
-| Android panic containment | Production-safe JNI boundary. |
-| x86_64 Android target | Emulator CI and developer preview usability. |
-| Contract imports + runtime JSON/HTTP | End-to-end Abla-owned RPC. |
+| `extern:"c"` scalar/pointer/C-string calls | Mobile services and native host functions declared by importable Abla Mobile modules. |
+| Exported scalar and borrowed callback ABI | One process-long `abla_mobile_run` entry with no application handle. |
+| Programmable target/object emission | Produce the application object without generating platform source. |
+| Managed root frames and memory facade | Keep arbitrary event-loop locals reachable and enable the mobile collector. |
+| Portable value implementation | Compiled unchanged under private names and reached through the mobile-owned AArch64 ABI shim. |
+| Contract imports + runtime JSON/HTTP | Later end-to-end Abla-owned RPC. |
+
+The existing LLVM value declarations carry `sret`/`byval` attributes. On
+AArch64, `runtime/native/abla_mobile_value_abi_aarch64.ll` matches that emitted
+ABI and forwards into a pointer-only C bridge. This is target integration owned
+by Abla Mobile, not a compiler-runtime modification. An `ablac` RFC is needed
+only if multiple targets later justify a first-class provider hook that removes
+the shim.
 
 ### 3.2 No longer required for the MVP
 
@@ -200,29 +208,22 @@ An emulator displays `Count: 0`; tapping the button crosses the fixed native
 dispatcher and displays `Count: 1`. The Android host uses no application/state
 handle and the application artifact contains no generated Kotlin.
 
-## 7. Milestone 1: runtime-owned `MobileProgram`
+## 7. Milestone 1: process-long Abla event loop
 
 This milestone replaces the spike fixture with real Abla state and lifecycle.
 
-### Compiler/runtime work
+### Runtime work in Abla Mobile
 
-- Add one process-scoped runtime root for the selected mobile entry.
-- Define startup validation for exactly one `@mobile_app` function.
-- Retain one affine `MobileProgram` containing render/event closures without
-  exposing it through the foreign ABI.
-- Support fixed exported calls:
-  - start;
-  - attach/current-tree publish;
-  - dispatch by revision/event ID;
-  - displayed-revision acknowledgement;
-  - detach; and
-  - bounded error inspection if needed.
-- Support fixed imported host calls:
-  - publish copied tree bytes;
-  - request a platform effect; and
-  - report a bounded fatal/development diagnostic.
-- Serialize start, event dispatch, completion commit, and render on one mobile
-  executor.
+- Start exactly one exported `abla_mobile_run` call on a native thread.
+- Keep it active for the process lifetime so ordinary Abla locals and root
+  frames own every application value.
+- Use one borrowed callback for the duration of that call to publish copied
+  tree bytes and synchronously receive events. The callback is native-only and
+  never reaches Kotlin as an Abla handle.
+- Serialize event handling and rendering in that loop. Add completion messages
+  to the same queue when timers, RPC, and platform effects land.
+- Keep runtime configuration in importable `src/runtime.ab` and platform
+  allocation, collection, panic, and ABI code in `runtime/native`.
 - Specify process lifetime, idempotent start, attach/detach, and configuration
   recreation behavior.
 - Add checked native fixtures for wrong-thread calls, repeated attach/detach,
@@ -231,8 +232,8 @@ This milestone replaces the spike fixture with real Abla state and lifecycle.
 ### Framework integration
 
 - Implement a temporary ordinary-Abla builder API for the three spike nodes.
-- Create a `MobileProgram` with at least three separately captured mutable
-  values, not a state class.
+- Create a process-long loop with at least three separate mutable values, not a
+  state class.
 - Keep the event closure table in Abla and publish only stable event IDs.
 - Rebuild the table transactionally with each tree revision.
 - Retain only the bounded displayed/pending revision window and retire older
@@ -457,8 +458,9 @@ Keep the vertical slice reviewable:
 1. Protocol ADR, v1 headers, limits, fixtures, and ABI manifest schema.
 2. Reusable Android host AAR with fake tree source and static Compose rendering.
 3. Fixed native event round trip and two-revision counter spike.
-4. `ablac` process-owned mobile root and fixed entrypoint/import proof.
-5. Abla `MobileProgram`, event table, and three-variable counter using builders.
+4. Mobile-owned target ABI, allocation/collector, and fixed entrypoint/extern
+   proof against an unchanged `ablac` checkout.
+5. Abla event loop, event table, and multi-variable showcase using builders.
 6. `$mobile` parser and executable lowering for `Column`, `Text`, and `Button`.
 7. Dirty scheduler, transactional publish, stale-event rejection, and text
    input.
@@ -468,9 +470,8 @@ Keep the vertical slice reviewable:
 11. User-owned native component and first platform service.
 12. Android hardening, x86_64 CI, standalone AAB, and embedded example.
 
-Pull requests 1–3 can proceed with native fixtures while compiler work is under
-review. The fixture must be deleted or isolated from release packaging once the
-real `MobileProgram` path lands.
+The native fixtures remain as small boundary proofs; release packaging uses the
+real Abla event loop and reusable host.
 
 ## 15. Test matrix
 
@@ -495,7 +496,7 @@ real `MobileProgram` path lands.
 | UI snapshots are mistaken for mirrored state | Protocol contains presentation-only values and events; prohibit state paths, objects, getters, and persistence through the tree. |
 | Process singleton limits multi-window/embedding | Declare one attached root in v1; design an internal scene model before expanding without exporting state handles. |
 | Event IDs are reused after rerender | Bind every event to a tree revision and transactionally swap tree/event tables. |
-| Mutable closure lifetime is unsound | Make `MobileProgram` an affine runtime-owned root and add compiler/runtime conformance tests before UI expansion. |
+| Long-lived values are reclaimed or missed by GC | Keep the event loop inside one managed Abla call, enable emitted root frames through `src/runtime.ab`, and stress the mobile collector on-device. |
 | Async work mutates from the wrong thread | Resume all managed completions on the serialized mobile executor; reject unsupported mutation paths. |
 | JNI becomes chatty | Publish one bounded binary tree per render and one event call per input; measure before adding subtree frames. |
 | Protocol/AAR versions drift | Pin both in `abla.lock`/manifest and fail required-feature or major mismatches at startup. |
@@ -505,11 +506,11 @@ real `MobileProgram` path lands.
 
 ## 17. Decisions to lock before the preview
 
-- exact `@mobile_app` return/entry syntax;
+- exact high-level mobile entry syntax over the proven process-long event loop;
 - whether multiline inline event blocks land in the first parser version;
 - binary tree tag layout and hard limits;
 - fixed C/JNI symbol names, byte ownership, and status model;
-- process root startup/failure/restart policy;
+- event-loop startup/failure/restart policy;
 - executor ownership and managed task API;
 - stale-event and event-ID derivation rules;
 - Activity recreation and optional Abla persistence API;
@@ -523,7 +524,7 @@ real `MobileProgram` path lands.
 The developer preview is complete when a clean checkout can:
 
 1. resolve one lock for shared, mobile, backend, and Android host artifacts;
-2. compile an Abla `MobileProgram` to arm64 and x86_64 shared libraries;
+2. compile an Abla mobile event loop to arm64 and x86_64 application objects;
 3. package the precompiled Compose host without generating Kotlin source;
 4. retain several independent Abla variables through Activity recreation;
 5. render them through a bounded immutable semantic tree;

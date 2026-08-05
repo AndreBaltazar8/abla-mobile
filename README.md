@@ -20,8 +20,14 @@ The framework is intended to provide:
 - Abla-owned, schema-checked RPC clients plus generated Abla server routes; and
 - optional user-owned Kotlin/Java/C/C++ and Swift/Objective-C escape hatches.
 
-This repository is currently in the design stage. The architecture, proposed
-API, wire contracts, compiler prerequisites, and implementation sequence are
-defined in [the design specification](docs/design-spec.md). Concrete work
-breakdown, dependencies, milestones, and release gates are tracked in the
-[implementation plan](plan.md).
+The Android vertical slice is implemented: an Abla-owned event loop publishes
+semantic trees to a reusable Compose host, receives events, and rerenders while
+keeping independent variables inside Abla. Application modules contain no
+Kotlin source. The mobile runtime API lives in `src/runtime.ab`; Android
+allocation, collection, panic policy, and the target ABI adapter live under
+`runtime/` and are linked by the application template. `../ablac` is consumed
+unchanged.
+
+The architecture and wire contracts are defined in
+[the design specification](docs/design-spec.md). Remaining work and release
+gates are tracked in the [implementation plan](plan.md).

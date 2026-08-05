@@ -1,0 +1,223 @@
+import "abla/json"
+
+// Platform-neutral presentation nodes. Application state is never stored here;
+// a fresh tree is constructed from current Abla values for each revision.
+class MobileNode(
+    val kind: string,
+    val key: string,
+    val properties: Json,
+    val children: array<MobileNode>
+)
+
+fun mobileProperties(keys: array<string>, values: array<Json>): Json =
+    jsonObject(keys, values)
+
+fun mobileEmptyProperties(): Json = jsonObject([], [])
+
+fun mobileColumn(
+    key: string,
+    padding: int,
+    spacing: int,
+    scroll: bool,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "column",
+    key,
+    mobileProperties(
+        ["padding", "spacing", "scroll"],
+        [jsonInteger(padding), jsonInteger(spacing), jsonBoolean(scroll)]
+    ),
+    children
+)
+
+fun mobileRow(
+    key: string,
+    spacing: int,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "row",
+    key,
+    mobileProperties(["spacing"], [jsonInteger(spacing)]),
+    children
+)
+
+fun mobileText(
+    key: string,
+    text: string,
+    style: string
+): MobileNode = MobileNode(
+    "text",
+    key,
+    mobileProperties(
+        ["text", "style"],
+        [jsonString(text), jsonString(style)]
+    ),
+    []
+)
+
+fun mobileButton(
+    key: string,
+    text: string,
+    event: int,
+    enabled: bool,
+    appearance: string
+): MobileNode = MobileNode(
+    "button",
+    key,
+    mobileProperties(
+        ["text", "event", "enabled", "appearance"],
+        [jsonString(text), jsonInteger(event), jsonBoolean(enabled),
+         jsonString(appearance)]
+    ),
+    []
+)
+
+fun mobileTextField(
+    key: string,
+    label: string,
+    value: string,
+    event: int
+): MobileNode = MobileNode(
+    "textField",
+    key,
+    mobileProperties(
+        ["label", "value", "event"],
+        [jsonString(label), jsonString(value), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileSwitch(
+    key: string,
+    label: string,
+    checked: bool,
+    event: int
+): MobileNode = MobileNode(
+    "switch",
+    key,
+    mobileProperties(
+        ["label", "checked", "event"],
+        [jsonString(label), jsonBoolean(checked), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileCheckbox(
+    key: string,
+    label: string,
+    checked: bool,
+    event: int
+): MobileNode = MobileNode(
+    "checkbox",
+    key,
+    mobileProperties(
+        ["label", "checked", "event"],
+        [jsonString(label), jsonBoolean(checked), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileSlider(
+    key: string,
+    label: string,
+    value: int,
+    minimum: int,
+    maximum: int,
+    event: int
+): MobileNode = MobileNode(
+    "slider",
+    key,
+    mobileProperties(
+        ["label", "value", "minimum", "maximum", "event"],
+        [jsonString(label), jsonInteger(value), jsonInteger(minimum),
+         jsonInteger(maximum), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileProgress(
+    key: string,
+    value: int,
+    maximum: int,
+    circular: bool
+): MobileNode = MobileNode(
+    "progress",
+    key,
+    mobileProperties(
+        ["value", "maximum", "circular"],
+        [jsonInteger(value), jsonInteger(maximum), jsonBoolean(circular)]
+    ),
+    []
+)
+
+fun mobileDivider(key: string): MobileNode = MobileNode(
+    "divider", key, mobileEmptyProperties(), []
+)
+
+fun mobileSpacer(key: string, height: int): MobileNode = MobileNode(
+    "spacer",
+    key,
+    mobileProperties(["height"], [jsonInteger(height)]),
+    []
+)
+
+fun mobileCard(
+    key: string,
+    title: string,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "card",
+    key,
+    mobileProperties(["title"], [jsonString(title)]),
+    children
+)
+
+fun mobileChip(
+    key: string,
+    text: string,
+    selected: bool,
+    event: int,
+    payload: string
+): MobileNode = MobileNode(
+    "chip",
+    key,
+    mobileProperties(
+        ["text", "selected", "event", "payload"],
+        [jsonString(text), jsonBoolean(selected), jsonInteger(event),
+         jsonString(payload)]
+    ),
+    []
+)
+
+fun mobileList(
+    key: string,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "list", key, mobileEmptyProperties(), children
+)
+
+fun mobileNodeJson(node: MobileNode): Json {
+    val children: array<Json> = []
+    var index = 0
+    while (index < node.children.size) {
+        children.append(mobileNodeJson(node.children[index]))
+        index = index + 1
+    }
+    jsonObject(
+        ["type", "key", "properties", "children"],
+        [jsonString(node.kind), jsonString(node.key), node.properties,
+         jsonArray(children)]
+    )
+}
+
+fun mobileEncodeTree(
+    revision: int,
+    title: string,
+    darkTheme: bool,
+    root: MobileNode
+): string = jsonStringify(jsonObject(
+    ["protocol", "revision", "title", "darkTheme", "root"],
+    [jsonInteger(1), jsonInteger(revision), jsonString(title),
+     jsonBoolean(darkTheme), mobileNodeJson(root)]
+))
+

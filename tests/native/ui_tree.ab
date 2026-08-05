@@ -1,0 +1,25 @@
+import "abla/build"
+import "../../src/ui.ab"
+
+fun renderUiTree(): string {
+    val controls: array<MobileNode> = [
+        mobileText("title", "Abla Mobile", "headline"),
+        mobileButton("increment", "Increment", 1, true, "filled"),
+        mobileTextField("name", "Name", "Abla", 2),
+        mobileSwitch("theme", "Dark theme", true, 3),
+        mobileSlider("volume", "Volume", 65, 0, 100, 4),
+        mobileProgress("progress", 65, 100, false)
+    ]
+    mobileEncodeTree(
+        7,
+        "Showcase",
+        true,
+        mobileColumn("root", 24, 12, true, controls)
+    )
+}
+
+val renderUiTreeExported = #exportFunction(
+    "renderUiTree",
+    "abla_mobile_test_tree"
+)
+

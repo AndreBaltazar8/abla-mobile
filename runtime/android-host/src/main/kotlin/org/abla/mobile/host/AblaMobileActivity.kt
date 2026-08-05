@@ -1,0 +1,20 @@
+package org.abla.mobile.host
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+
+class AblaMobileActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        if (!NativeBridge.start()) {
+            NativeBridge.fail("Unable to start libabla_app.so")
+        }
+        setContent {
+            AblaMobileHost()
+        }
+    }
+}
+

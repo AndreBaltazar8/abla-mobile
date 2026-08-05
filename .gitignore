@@ -1,5 +1,8 @@
 /build/
+**/build/
+**/.cxx/
 /.gradle/
 /local.properties
 *.iml
-
+**/jniLibs/**/libabla_app.so*
+**/src/main/obj/

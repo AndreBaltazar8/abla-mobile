@@ -1,0 +1,11 @@
+import "../../src/android_build.ab"
+
+val showcaseAndroid = #mobileBuildAndroidArm64Object(
+    "abla-mobile-showcase",
+    "examples/showcase/mobile/app.ab",
+    "examples/showcase/android-app/src/main/obj/arm64-v8a/abla_app.o",
+    true,
+    false
+)
+
+fun main: int = if (showcaseAndroid) 0 else 1

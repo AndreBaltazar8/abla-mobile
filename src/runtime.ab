@@ -1,0 +1,15 @@
+import "abla/memory"
+
+// The Abla API for the process-owned mobile runtime. The implementation of
+// these memory operations is selected by the Android native layer in this
+// repository; application code imports this module and never owns a runtime
+// or state handle.
+
+fun mobileConfigureRuntime(memoryLimitBytes: int): void {
+    memorySetLimit(memoryLimitBytes)
+    return
+}
+
+fun mobileMemoryLiveBytes(): int = memoryLiveBytes()
+
+fun mobileCollectMemory(): int = memoryCollect()

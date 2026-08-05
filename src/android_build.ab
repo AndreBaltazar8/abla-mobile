@@ -1,0 +1,31 @@
+import "abla/build"
+
+compile fun mobileAndroidArm64Target(): bool = defineTarget(
+    "abla-mobile-android-arm64",
+    "aarch64-linux-android24",
+    "elf",
+    "lld-elf",
+    "aarch64linux",
+    false,
+    false
+)
+
+compile fun mobileBuildAndroidArm64Object(
+    name: string,
+    entry: string,
+    output: string,
+    fast: bool,
+    cache: bool
+): bool {
+    val target = mobileAndroidArm64Target()
+    val program = buildProgram(
+        name,
+        entry,
+        output,
+        "abla-mobile-android-arm64",
+        "object",
+        fast,
+        cache
+    )
+    target && program
+}

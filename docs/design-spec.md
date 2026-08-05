@@ -139,47 +139,42 @@ The first release will not:
 
 ### 4.1 Abla owns the program
 
-Exactly one `@mobile_app` function is selected for an Android application. It
-returns a `MobileProgram`, not an application state object and not a compile-time
-`MobileView`.
-
-`MobileProgram` contains Abla-owned render and event closures. The mobile runtime
-roots the program internally for the life of the process. Kotlin starts and
-attaches to the program through fixed entrypoints, but it never receives a
-token identifying that program.
+Exactly one process-long Abla event-loop function is exported as
+`abla_mobile_run`. It is a running Abla call, not an application object,
+application handle, state object, or compile-time `MobileView`. Its ordinary
+locals, closures, arrays, and objects stay on Abla-managed roots for the life of
+the call. Kotlin starts the fixed native bridge but never receives a token
+identifying the Abla program.
 
 The intended source form is:
 
 ```abla
-#import(github("AndreBaltazar8/abla-mobile"))
-#import("../shared/counter.ab")
+import "github.com/AndreBaltazar8/abla-mobile/src/runtime.ab"
+import "github.com/AndreBaltazar8/abla-mobile/src/ui.ab"
 
-@mobile_app
-fun counterApplication(): MobileProgram {
+fun counterApplication(callback: (int) -> int): int {
     var count = 0
     var status = "Ready"
     var requests = 0
-
-    return $mobile
-        <Screen id="counter" title="Abla Counter">
-            <Column padding="large" spacing="medium" align="center">
-                <Text key="count" style="headline">Count: {count}</Text>
-                <Text key="status">{status}</Text>
-                <Button onTap={
-                    count = nextCount(count)
-                    status = "Updated locally"
-                }>
-                    Increment locally
-                </Button>
-            </Column>
-        </Screen>
+    mobileConfigureRuntime(268435456)
+    while (true) {
+        mobilePublish(callback, counterTree(count, status, requests))
+        val event = mobileWaitEvent(callback)
+        if (event == eventIncrement) {
+            count = count + 1
+            status = "Updated locally"
+        }
+    }
+    0
 }
 ```
 
-The example has three independent mutable variables. The compiler lowers their
-mutable captures according to ordinary Abla closure rules. `$mobile` does not
-invent a `CounterState`, and the Android host cannot inspect any of the three
-variables.
+The example has three independent mutable variables. `$mobile` will become
+syntax over this proven loop and builder API; it must not invent a
+`CounterState`, and the Android host cannot inspect any of the variables. The
+native callback is borrowed only while `abla_mobile_run` is active, remains
+inside the C bridge, and is never exposed to Kotlin or used as an application
+handle.
 
 The exact multiline event-block syntax remains subject to parser validation.
 If the initial subparser can only accept expressions, a named local function or
@@ -190,7 +185,7 @@ and ownership model must not change to accommodate parser convenience.
 
 The Android v1 runtime has one process-owned mobile program:
 
-- `start` initializes it at most once;
+- the native bridge starts the event-loop call at most once;
 - an Activity/embedded host may attach and request the current tree;
 - configuration changes detach and reattach the host without recreating Abla
   state;
@@ -322,7 +317,7 @@ event table in Abla:
   stableEventId -> closure { count = count + 1 }
 ```
 
-The event table is owned and rooted by the Abla `MobileProgram`. Kotlin sees
+The event table is owned and rooted by the process-long Abla call. Kotlin sees
 only the stable event ID embedded in the immutable tree. It does not retain an
 Abla callback or function pointer.
 
@@ -646,24 +641,27 @@ Generated output is deterministic, staged transactionally, and restricted to
 the configured build directory. User-owned platform files are never
 overwritten.
 
-## 13. Required compiler/runtime work
+## 13. Compiler seam and mobile-owned runtime
 
-### 13.1 Required for the Android vertical slice
+### 13.1 Android vertical slice
 
-The framework/compiler seam needs:
+The Android slice uses existing compiler features unchanged:
 
-1. a runtime-owned, process-scoped root for one `MobileProgram`;
-2. safe retention and invocation of its `FnMut` render/event closures entirely
-   inside Abla;
-3. fixed exported Android entrypoints that may reach this runtime-owned state
-   without accepting or returning foreign handles;
-4. fixed imported host calls for publishing copied bytes and requesting
-   effects;
-5. a serialized mobile executor and a way for managed task completions to post
-   back to it;
-6. Android checked panic containment before production;
-7. deterministic `$mobile` lowering to executable UI builder calls; and
-8. arm64 and x86_64 Android shared-library output.
+1. arbitrary `extern:"c"` scalar, pointer, C-string, and borrowed callback
+   calls for mobile services;
+2. a fixed exported scalar/callback entrypoint;
+3. programmable AArch64 target and object emission;
+4. compiler-emitted managed root frames and the `abla/memory` facade; and
+5. the portable value implementation compiled unchanged.
+
+Abla Mobile owns `src/runtime.ab`, Android allocation/collection and panic
+policy, the serialized bridge, and the target-side value adapter. The emitted
+LLVM value ABI currently contains `sret`/`byval` attributes. A fixed AArch64
+LLVM shim in this repository matches those symbols and forwards them through a
+pointer-only C bridge into the privately named portable value implementation.
+Therefore no `ablac` source or runtime modification is required. A future RFC
+is appropriate only if a reusable compiler target-provider hook becomes more
+valuable than this contained adapter.
 
 This design does not require foreign-owned instance handles, per-binding export
 generation, reactive access-path reflection, or hygienically generated Kotlin
@@ -733,7 +731,7 @@ access, arm64 device tests, x86_64 emulator tests, and deterministic packaging.
 
 ## 16. iOS direction
 
-iOS reuses the Abla `MobileProgram`, render/event ownership, semantic protocol,
+iOS reuses the Abla event-loop ownership model, semantic protocol,
 and Abla-owned reactivity. A precompiled SwiftUI host interprets the same
 semantic tree and forwards events through a fixed C ABI. Application builds do
 not generate Swift.
@@ -747,7 +745,8 @@ registry model.
 
 A clean checkout must be able to:
 
-1. compile one `@mobile_app` into `libabla_app.so` for arm64 and x86_64;
+1. compile one Abla mobile event loop into an application library for arm64 and
+   x86_64;
 2. package it with the precompiled Android host without generating Kotlin;
 3. keep count, status, input, and request state as separate Abla values;
 4. render those values through a semantic UI tree;
