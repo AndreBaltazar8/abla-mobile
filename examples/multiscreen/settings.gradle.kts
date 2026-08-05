@@ -14,8 +14,8 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "abla-mobile"
+rootProject.name = "abla-mobile-multiscreen"
 
-// The multi-screen example is a standalone Gradle build.
+include(":android-app")
 include(":runtime:android-host")
-include(":examples:showcase:android-app")
+project(":runtime:android-host").projectDir = file("../../runtime/android-host")

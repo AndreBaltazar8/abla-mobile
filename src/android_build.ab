@@ -1,4 +1,113 @@
 import "abla/build"
+import "abla/compiler"
+
+// Android package generation is an Abla Mobile concern. The compiler only
+// supplies transactional file writes and a generic Android-capable object
+// target; this module owns all manifest, resource, and Gradle policy. The root
+// build package authorizes this declared filesystem.write capability.
+#compilerGrant("filesystem.write")
+
+class MobileAndroidApplication(
+    val applicationId: string,
+    val title: string,
+    val versionCode: int,
+    val versionName: string,
+    val minSdk: int,
+    val targetSdk: int,
+    val compileSdk: int,
+    val allowBackup: bool,
+    val supportsRtl: bool,
+    val usesCleartextTraffic: bool
+)
+
+// Resource references are intentionally strings: applications may keep
+// drawables in their normal res tree without this build layer copying assets.
+// Empty icon values ask Android to use the package/default launcher icon.
+class MobileAndroidBranding(
+    val applicationIcon: string,
+    val roundApplicationIcon: string,
+    val splashBackground: string,
+    val splashIcon: string,
+    val themeParent: string
+)
+
+// These are inbound intent filters for the one reusable mobile activity.
+// Runtime outbound actions such as opening a browser remain copied effects.
+class MobileAndroidIntentFilter(
+    val actions: array<string>,
+    val categories: array<string>,
+    val scheme: string,
+    val host: string,
+    val pathPrefix: string,
+    val mimeType: string,
+    val autoVerify: bool
+)
+
+class MobileAndroidConfiguration(
+    val name: string,
+    val entry: string,
+    val module: string,
+    val variant: string,
+    val application: MobileAndroidApplication,
+    val branding: MobileAndroidBranding,
+    val permissions: array<string>,
+    val intentFilters: array<MobileAndroidIntentFilter>,
+    val fast: bool,
+    val cache: bool
+)
+
+compile fun mobileAndroidApplication(
+    applicationId: string,
+    title: string,
+    versionCode: int,
+    versionName: string
+): MobileAndroidApplication = MobileAndroidApplication(
+    applicationId,
+    title,
+    versionCode,
+    versionName,
+    24,
+    36,
+    36,
+    false,
+    true,
+    false
+)
+
+compile fun mobileAndroidBranding(
+    splashBackground: string,
+    splashIcon: string
+): MobileAndroidBranding = MobileAndroidBranding(
+    "",
+    "",
+    splashBackground,
+    splashIcon,
+    "@android:style/Theme.Material.Light.NoActionBar"
+)
+
+compile fun mobileAndroidDeepLink(
+    scheme: string,
+    host: string,
+    pathPrefix: string,
+    autoVerify: bool
+): MobileAndroidIntentFilter = MobileAndroidIntentFilter(
+    ["android.intent.action.VIEW"],
+    ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"],
+    scheme,
+    host,
+    pathPrefix,
+    "",
+    autoVerify
+)
+
+compile fun mobileAndroidInternetPermission(): string =
+    "android.permission.INTERNET"
+
+compile fun mobileAndroidPostNotificationsPermission(): string =
+    "android.permission.POST_NOTIFICATIONS"
+
+compile fun mobileAndroidCameraPermission(): string =
+    "android.permission.CAMERA"
 
 compile fun mobileAndroidArm64Target(): bool = defineTarget(
     "abla-mobile-android-arm64",
@@ -10,6 +119,236 @@ compile fun mobileAndroidArm64Target(): bool = defineTarget(
     false
 )
 
+compile fun mobileAndroidXml(value: string): string {
+    var escaped = ""
+    var index = 0
+    while (index < value.size) {
+        val byte = value[index]
+        if (byte == 38) escaped = "$escaped&amp;"
+        else if (byte == 60) escaped = "$escaped&lt;"
+        else if (byte == 62) escaped = "$escaped&gt;"
+        else if (byte == 34) escaped = "$escaped&quot;"
+        else if (byte == 39) escaped = "$escaped&apos;"
+        else escaped = "$escaped${value.slice(index, index + 1)}"
+        index = index + 1
+    }
+    escaped
+}
+
+compile fun mobileAndroidProperty(value: string): string {
+    var escaped = ""
+    var index = 0
+    while (index < value.size) {
+        val byte = value[index]
+        if (byte == 92) escaped = "$escaped\\\\"
+        else if (byte == 32) escaped = "$escaped\\ "
+        else if (byte == 9) escaped = "$escaped\\t"
+        else if (byte == 10) escaped = "$escaped\\n"
+        else if (byte == 13) escaped = "$escaped\\r"
+        else if (byte == 12) escaped = "$escaped\\f"
+        else if (byte == 61) escaped = "$escaped\\="
+        else if (byte == 58) escaped = "$escaped\\:"
+        else if (byte == 35) escaped = "$escaped\\#"
+        else if (byte == 33) escaped = "$escaped\\!"
+        else escaped = "$escaped${value.slice(index, index + 1)}"
+        index = index + 1
+    }
+    escaped
+}
+
+compile fun mobileAndroidBoolean(value: bool): string =
+    if (value) "true" else "false"
+
+compile fun mobileAndroidSafeVariant(value: string): bool {
+    var valid = value.size > 0
+    var index = 0
+    while (valid && index < value.size) {
+        val byte = value[index]
+        val letter = (byte >= 65 && byte <= 90) ||
+            (byte >= 97 && byte <= 122)
+        val digit = byte >= 48 && byte <= 57
+        if (!letter && !digit && byte != 45 && byte != 95) valid = false
+        index = index + 1
+    }
+    valid
+}
+
+compile fun mobileAndroidValidIntentFilter(
+    filter: MobileAndroidIntentFilter
+): bool {
+    var valid = filter.actions.size > 0
+    var index = 0
+    while (valid && index < filter.actions.size) {
+        if (filter.actions[index] == "") valid = false
+        index = index + 1
+    }
+    index = 0
+    while (valid && index < filter.categories.size) {
+        if (filter.categories[index] == "") valid = false
+        index = index + 1
+    }
+    if ((filter.host != "" || filter.pathPrefix != "") &&
+        filter.scheme == "") valid = false
+    if (filter.pathPrefix != "" && filter.pathPrefix[0] != 47) valid = false
+    valid
+}
+
+compile fun mobileAndroidManifest(
+    configuration: MobileAndroidConfiguration
+): string {
+    val application = configuration.application
+    val branding = configuration.branding
+    var manifest = "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n"
+
+    var permission = 0
+    while (permission < configuration.permissions.size) {
+        manifest = "$manifest    <uses-permission android:name=\"${mobileAndroidXml(configuration.permissions[permission])}\" />\n"
+        permission = permission + 1
+    }
+
+    manifest = "$manifest\n    <application\n        android:allowBackup=\"${mobileAndroidBoolean(application.allowBackup)}\"\n        android:label=\"@string/abla_mobile_app_name\"\n"
+    if (branding.applicationIcon != "") {
+        manifest = "$manifest        android:icon=\"${mobileAndroidXml(branding.applicationIcon)}\"\n"
+    }
+    if (branding.roundApplicationIcon != "") {
+        manifest = "$manifest        android:roundIcon=\"${mobileAndroidXml(branding.roundApplicationIcon)}\"\n"
+    }
+    manifest = "$manifest        android:supportsRtl=\"${mobileAndroidBoolean(application.supportsRtl)}\"\n        android:theme=\"@style/AblaMobileStartingTheme\"\n        android:usesCleartextTraffic=\"${mobileAndroidBoolean(application.usesCleartextTraffic)}\""
+
+    if (configuration.intentFilters.size == 0) return "$manifest />\n</manifest>\n"
+
+    manifest = "$manifest>\n        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileActivity\"\n            android:exported=\"true\">\n"
+    var filterIndex = 0
+    while (filterIndex < configuration.intentFilters.size) {
+        val filter = configuration.intentFilters[filterIndex]
+        manifest = "$manifest            <intent-filter"
+        if (filter.autoVerify) manifest = "$manifest android:autoVerify=\"true\""
+        manifest = "$manifest>\n"
+        var action = 0
+        while (action < filter.actions.size) {
+            manifest = "$manifest                <action android:name=\"${mobileAndroidXml(filter.actions[action])}\" />\n"
+            action = action + 1
+        }
+        var category = 0
+        while (category < filter.categories.size) {
+            manifest = "$manifest                <category android:name=\"${mobileAndroidXml(filter.categories[category])}\" />\n"
+            category = category + 1
+        }
+        if (filter.scheme != "" || filter.mimeType != "") {
+            manifest = "$manifest                <data"
+            if (filter.scheme != "") manifest = "$manifest android:scheme=\"${mobileAndroidXml(filter.scheme)}\""
+            if (filter.host != "") manifest = "$manifest android:host=\"${mobileAndroidXml(filter.host)}\""
+            if (filter.pathPrefix != "") manifest = "$manifest android:pathPrefix=\"${mobileAndroidXml(filter.pathPrefix)}\""
+            if (filter.mimeType != "") manifest = "$manifest android:mimeType=\"${mobileAndroidXml(filter.mimeType)}\""
+            manifest = "$manifest />\n"
+        }
+        manifest = "$manifest            </intent-filter>\n"
+        filterIndex = filterIndex + 1
+    }
+    "$manifest        </activity>\n    </application>\n</manifest>\n"
+}
+
+compile fun mobileAndroidValues(
+    configuration: MobileAndroidConfiguration
+): string = "<resources>\n    <string name=\"abla_mobile_app_name\">${mobileAndroidXml(configuration.application.title)}</string>\n    <color name=\"abla_mobile_splash_background\">${mobileAndroidXml(configuration.branding.splashBackground)}</color>\n    <style name=\"AblaMobileTheme\" parent=\"${mobileAndroidXml(configuration.branding.themeParent)}\" />\n    <style name=\"AblaMobileStartingTheme\" parent=\"@style/AblaMobileTheme\">\n        <item name=\"android:windowBackground\">@color/abla_mobile_splash_background</item>\n    </style>\n</resources>\n"
+
+compile fun mobileAndroidValues31(
+    configuration: MobileAndroidConfiguration
+): string {
+    var values = "<resources>\n    <style name=\"AblaMobileStartingTheme\" parent=\"@style/AblaMobileTheme\">\n        <item name=\"android:windowSplashScreenBackground\">@color/abla_mobile_splash_background</item>\n"
+    if (configuration.branding.splashIcon != "") {
+        values = "$values        <item name=\"android:windowSplashScreenAnimatedIcon\">${mobileAndroidXml(configuration.branding.splashIcon)}</item>\n"
+    }
+    "$values    </style>\n</resources>\n"
+}
+
+compile fun mobileAndroidProperties(
+    configuration: MobileAndroidConfiguration
+): string {
+    val application = configuration.application
+    "namespace=${mobileAndroidProperty(application.applicationId)}\napplicationId=${mobileAndroidProperty(application.applicationId)}\ncompileSdk=${application.compileSdk}\nminSdk=${application.minSdk}\ntargetSdk=${application.targetSdk}\nversionCode=${application.versionCode}\nversionName=${mobileAndroidProperty(application.versionName)}\napplicationObject=obj/arm64-v8a/abla_app.o\nmanifest=AndroidManifest.xml\nresources=res\n"
+}
+
+compile fun mobileWriteAndroidPackage(
+    configuration: MobileAndroidConfiguration
+): bool {
+    if (!mobileAndroidSafeVariant(configuration.variant)) return false
+    val application = configuration.application
+    if (application.applicationId == "" || application.title == "" ||
+        application.versionCode < 1 || application.versionName == "" ||
+        application.minSdk < 24 ||
+        application.targetSdk < application.minSdk ||
+        application.compileSdk < application.targetSdk ||
+        configuration.branding.splashBackground == "" ||
+        configuration.branding.themeParent == "") return false
+
+    var permission = 0
+    while (permission < configuration.permissions.size) {
+        if (configuration.permissions[permission] == "") return false
+        permission = permission + 1
+    }
+    var filter = 0
+    while (filter < configuration.intentFilters.size) {
+        if (!mobileAndroidValidIntentFilter(
+            configuration.intentFilters[filter]
+        )) return false
+        filter = filter + 1
+    }
+
+    val root = "${configuration.module}/build/abla-mobile/${configuration.variant}"
+    var written = compiler.writeFile(
+        "$root/application.properties",
+        mobileAndroidProperties(configuration)
+    )
+    if (written) written = compiler.writeFile(
+        "$root/AndroidManifest.xml",
+        mobileAndroidManifest(configuration)
+    )
+    if (written) written = compiler.writeFile(
+        "$root/res/values/abla_mobile.xml",
+        mobileAndroidValues(configuration)
+    )
+    if (written) written = compiler.writeFile(
+        "$root/res/values-v31/abla_mobile.xml",
+        mobileAndroidValues31(configuration)
+    )
+    written
+}
+
+// One application-facing call emits both each Abla object and every generated
+// Android package input. Named configurations coexist under build/abla-mobile
+// and Gradle selects one with -PablaMobileConfiguration=<variant>.
+compile fun mobileBuildAndroidConfigurations(
+    configurations: array<MobileAndroidConfiguration>
+): bool {
+    if (configurations.size == 0) return false
+    var built = mobileAndroidArm64Target()
+    var index = 0
+    while (built && index < configurations.size) {
+        val configuration = configurations[index]
+        built = mobileWriteAndroidPackage(configuration)
+        if (built) {
+            val root = "${configuration.module}/build/abla-mobile/${configuration.variant}"
+            built = buildProgram(
+                configuration.name,
+                configuration.entry,
+                "$root/obj/arm64-v8a/abla_app.o",
+                "abla-mobile-android-arm64",
+                "object",
+                configuration.fast,
+                configuration.cache
+            )
+        }
+        index = index + 1
+    }
+    built
+}
+
+compile fun mobileBuildAndroid(
+    configuration: MobileAndroidConfiguration
+): bool = mobileBuildAndroidConfigurations([configuration])
+
+// Kept as a low-level compatibility helper for callers that own packaging.
 compile fun mobileBuildAndroidArm64Object(
     name: string,
     entry: string,

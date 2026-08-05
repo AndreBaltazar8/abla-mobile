@@ -1,11 +1,26 @@
 import "../../src/android_build.ab"
 
-val showcaseAndroid = #mobileBuildAndroidArm64Object(
+val showcaseAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
     "abla-mobile-showcase",
     "examples/showcase/mobile/app.ab",
-    "examples/showcase/android-app/src/main/obj/arm64-v8a/abla_app.o",
+    "examples/showcase/android-app",
+    "debug",
+    mobileAndroidApplication(
+        "org.abla.mobile.showcase",
+        "Abla Mobile Showcase",
+        1,
+        "0.2.0"
+    ),
+    mobileAndroidBranding("#10131A", ""),
+    [mobileAndroidInternetPermission()],
+    [mobileAndroidDeepLink(
+        "https",
+        "mobile.abla.dev",
+        "/showcase",
+        true
+    )],
     true,
     false
-)
+))
 
 fun main: int = if (showcaseAndroid) 0 else 1

@@ -1,0 +1,99 @@
+import "abla/build"
+import "../../../src/mobile.ab"
+
+// A complete three-screen application in one Abla state machine. Android has
+// one reusable activity; page, form, counter, and theme state all stay here.
+fun multiscreenMobileRun(): int {
+    var screen = 0
+    var name = "Explorer"
+    var visits = 0
+    var darkTheme = false
+    var status = "Choose a destination"
+
+    mobileRun($mobile
+        <Screen
+            title={if (screen == 0) "Journeys" else if (screen == 1)
+                "Ocean trail" else "Settings"}
+            dark={darkTheme}
+        >
+            <Column key="screen" padding={20} spacing={14} scroll>
+                <If condition={screen != 0}>
+                    <Button
+                        key="back"
+                        appearance="text"
+                        onTap={screen = 0; status = "Returned home"}
+                    >← Back to journeys</Button>
+                    <Divider key="back-divider" />
+                </If>
+
+                <If condition={screen == 0}>
+                    <Text key="home-title" style="display">Hello, {name}</Text>
+                    <Text key="home-status" style="label">{status}</Text>
+                    <Card key="ocean-card" title="Ocean trail">
+                        <Text key="ocean-copy">
+                            A detail screen with its own reactive visit count.
+                        </Text>
+                        <Button
+                            key="open-ocean"
+                            onTap={screen = 1; visits = visits + 1;
+                                status = "Opened the ocean trail"}
+                        >Open journey</Button>
+                    </Card>
+                    <Button
+                        key="open-settings"
+                        appearance="outlined"
+                        onTap={screen = 2; status = "Editing preferences"}
+                    >Settings</Button>
+                </If>
+
+                <If condition={screen == 1}>
+                    <Text key="detail-title" style="display">Ocean trail</Text>
+                    <Text key="detail-visits">Visited {visits} time(s)</Text>
+                    <Progress key="trail-progress" value={68} maximum={100} />
+                    <Card key="detail-card" title="A separate view">
+                        <Text key="detail-copy">
+                            Navigation, history and this render are dispatched
+                            by the same captured Abla closure.
+                        </Text>
+                        <Button
+                            key="visit-again"
+                            onTap={visits = visits + 1;
+                                status = "Counted another visit"}
+                        >Visit again</Button>
+                    </Card>
+                    <Button
+                        key="detail-settings"
+                        appearance="outlined"
+                        onTap={screen = 2; status = "Editing preferences"}
+                    >Open settings</Button>
+                </If>
+
+                <If condition={screen == 2}>
+                    <Text key="settings-title" style="display">Settings</Text>
+                    <TextField
+                        key="profile-name"
+                        label="Display name"
+                        value={name}
+                        onChange={name = value; status = "Profile updated"}
+                    />
+                    <Switch
+                        key="dark-theme"
+                        label="Dark theme"
+                        checked={darkTheme}
+                        onChange={darkTheme = mobilePayloadBool(value);
+                            status = "Theme updated"}
+                    />
+                    <Button
+                        key="save-settings"
+                        onTap={screen = 0; status = "Preferences saved"}
+                    >Save and go home</Button>
+                </If>
+            </Column>
+        </Screen>
+    )
+}
+
+val multiscreenMobileRunExported = #exportFunction(
+    "multiscreenMobileRun",
+    "abla_mobile_run"
+)

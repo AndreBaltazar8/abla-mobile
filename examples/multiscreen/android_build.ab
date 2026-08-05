@@ -1,0 +1,26 @@
+import "../../src/android_build.ab"
+
+val multiscreenAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
+    "abla-mobile-multiscreen",
+    "examples/multiscreen/mobile/app.ab",
+    "examples/multiscreen/android-app",
+    "debug",
+    mobileAndroidApplication(
+        "org.abla.mobile.multiscreen",
+        "Abla Journeys",
+        1,
+        "0.1.0"
+    ),
+    mobileAndroidBranding("#062B3A", ""),
+    [],
+    [mobileAndroidDeepLink(
+        "abla-journeys",
+        "open",
+        "/ocean",
+        false
+    )],
+    true,
+    false
+))
+
+fun main: int = if (multiscreenAndroid) 0 else 1

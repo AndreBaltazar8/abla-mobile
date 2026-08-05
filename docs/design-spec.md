@@ -226,11 +226,11 @@ The application manifest declares install-time capabilities such as
 Abla. Android's internet capability does not require a runtime prompt. The
 showcase manifest includes it as the packaging example.
 
-Likewise, the Android 12+ splash icon/background and post-splash theme belong
+Likewise, the Android 12+ splash icon/background and post-launch theme belong
 to application theme resources and manifest metadata. They run before the
-first `$mobile` tree exists and do not create application state. The current
-showcase uses the platform's default splash derived from its label/theme;
-custom resource plumbing is a packaging extension, not a template node.
+first `$mobile` tree exists and do not create application state. The typed
+build configuration now generates a legacy window background plus API-31
+system splash resources and can reference an application-owned drawable.
 
 Fire-and-forget intents extend the effect-kind table with an allowlisted copied
 payload. Result-bearing intents require a copied request identifier plus a
@@ -240,8 +240,18 @@ preview and must not be emulated by passing a callback across JNI.
 
 ## 9. Target/runtime integration
 
-`src/android_build.ab` defines the AArch64 Android target and emits the Abla
-application object. `runtime/native/CMakeLists.txt` links it with:
+`src/android_build.ab` owns typed package configuration. One
+`mobileBuildAndroid` call transactionally emits the AArch64 application object,
+Gradle-readable package/version/SDK properties, manifest, label resources, and
+splash themes. Named configurations coexist under the application module's
+ignored `build/abla-mobile` directory; Gradle selects one explicitly.
+
+The generated manifest declares permissions and incoming intent filters. The
+filters can route a launch to the shared activity; copying the incoming
+URI/action into Abla is a future runtime event API. Outbound browser intent is
+already a copied runtime effect. Neither mechanism exposes an Abla handle.
+
+`runtime/native/CMakeLists.txt` links the emitted object with:
 
 - Android-owned allocation, conservative collection, roots, and panic policy;
 - the fixed app/host transport and platform effect queue;
@@ -257,10 +267,14 @@ RFC adds only the general initial-parser AST capability described above.
 
 The application module must contain no `.kt` source. It supplies:
 
-- its manifest/application metadata;
+- a stable Gradle adapter that consumes generated configuration;
 - a Gradle dependency on the reusable host AAR/module;
 - a CMake file calling `abla_mobile_add_android_application`; and
-- the compiler-emitted app object.
+- any application-owned drawables referenced by branding configuration.
+
+The Abla build transaction supplies its manifest/application metadata,
+resources, properties, and compiler-emitted app object. It does not generate
+application Kotlin.
 
 The reusable host is framework Kotlin compiled with the Compose plugin. It is
 not generated application code. Application-owned Kotlin may be supported as a
@@ -275,13 +289,17 @@ The Android preview is accepted when all of these pass:
 2. UI codec tests cover the complete node surface;
 3. template test compiles `$mobile`, dispatches all standard payload kinds,
    mutates seven independent captures, and verifies eight exact revisions;
-4. host showcase test publishes a real template-built tree from compiled Abla;
-5. ARM64 object and APK build from clean sources;
-6. the application module contains no Kotlin;
-7. ADB test verifies initial render, event mutation, exact stress-event count,
+4. typed package test verifies escaped resources, versions, permissions,
+   custom filters, icons, and API-31 splash output;
+5. multi-screen test walks Home, Detail, Settings, and Home across seven
+   renders while preserving independent Abla state;
+6. host showcase test publishes a real template-built tree from compiled Abla;
+7. ARM64 objects and both example APKs build from clean sources;
+8. the application modules contain no Kotlin;
+9. ADB test verifies initial render, event mutation, exact stress-event count,
    GC under pressure, Android effect dispatch, and no fatal log;
-8. `ablac`'s RFC implementation and full self-hosted suite pass; and
-9. generated artifacts are excluded from both repositories before publication.
+10. `ablac`'s RFC implementation and full self-hosted suite pass; and
+11. generated artifacts are excluded from both repositories before publication.
 
 ## 12. Explicit preview limits and future work
 

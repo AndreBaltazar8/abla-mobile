@@ -77,12 +77,19 @@ keeps later product work separate. The architecture is defined by
 ### 6. Android packaging and showcase
 
 - Added Android ARM64 target/object emission from Abla.
+- Added typed Android application, branding, permission, and inbound intent
+  configuration with one transactional package/object build call.
+- Added named build configurations selected by Gradle without generated Kotlin.
+- Generated package identity/version/SDK properties, manifest, title, legacy
+  splash background, and Android 12+ splash theme resources.
 - Added reusable CMake application linkage and Gradle host/application modules.
 - Built a broad showcase with independent counter, input, theme, preference,
   slider, section, list, progress, status, and platform-effect state/behavior.
 - Rewrote the showcase itself as one `mobileRun($mobile ...)` application with
   inline actions, conditionals, and dynamic list groups.
 - Asserted that the application module contains no `.kt` source.
+- Added an independently buildable three-screen Home/Detail/Settings example;
+  navigation and persistent screen state remain captured Abla variables.
 
 ### 7. Verification
 
@@ -95,6 +102,9 @@ keeps later product work separate. The architecture is defined by
 - ADB install/launch and UI assertions on a Samsung ARM64 device.
 - Exact rapid-event stress count with threshold GC and no panic.
 - Real Abla-requested Android toast verified in UI state and native logs.
+- Typed package fixture covering escaping, icons, permissions, custom intent
+  filters, deep links, version metadata, and splash resources.
+- Seven-render native multi-screen navigation proof and second Kotlin-free APK.
 - Repeatable build and device scripts that preserve the user's screen timeout.
 
 ## Developer-preview exit gate
@@ -133,8 +143,8 @@ working local-app preview.
   properties.
 - Add persistence/restoration controlled by Abla.
 - Add a bounded user-owned native component registry.
-- Add packaged splash-theme/icon configuration and typed manifest capability
-  helpers without generating application Kotlin.
+- Copy incoming launch URI/action payloads from matched intent filters into the
+  serialized Abla event loop.
 - Extend copied Android effects with share/email/dial/maps intents, then add
   request-ID/completion-event APIs for permissions and document/media pickers.
 

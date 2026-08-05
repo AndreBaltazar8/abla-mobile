@@ -63,8 +63,11 @@ then from this repository run:
 ./tools/test-native-loop.sh
 ./tools/test-ui-tree.sh
 ./tools/test-mobile-template.sh
+./tools/test-android-build-config.sh
+./tools/test-multiscreen.sh
 ./tools/test-showcase-host.sh
 ./tools/build-showcase-android.sh
+./tools/build-multiscreen-android.sh
 ```
 
 With an unlocked Android device connected through ADB:
@@ -122,18 +125,26 @@ fun application(): int {
 val exported = #exportFunction("application", "abla_mobile_run")
 ```
 
-Use `examples/showcase` as the Android packaging template:
+Use `examples/showcase` as the broad component template and
+`examples/multiscreen` as the Abla-owned Home/Detail/Settings navigation
+example. Android packaging is configured in one typed build call:
 
 1. Define state, a `$mobile` tree, and inline actions in one `mobileRun` call;
    export that Abla function as `abla_mobile_run`.
-2. Build an Android ARM64 object with `mobileBuildAndroidArm64Object()`.
-3. Point the app module's CMake configuration at that object.
+2. Pass `MobileAndroidConfiguration` to `mobileBuildAndroid()` to emit the
+   object, package identity/version, title, manifest permissions and incoming
+   intent filters, and splash resources together.
+3. Let the stable Gradle/CMake adapter consume the selected named
+   configuration from the module's ignored `build/abla-mobile` directory.
 4. Depend on `:runtime:android-host`; do not add application Kotlin.
 
 See [mobile templates](docs/mobile-templates.md) for the grammar, complete
 element/attribute table, action payload rules, dynamic child groups, and
-lowering contract. The underlying builder API remains available for reusable
-view functions and programmatically generated child groups.
+lowering contract. See [Android builds](docs/android-builds.md) for the typed
+configuration, variants, splash resources, permissions, and the distinction
+between incoming filters and runtime outbound intents. The underlying builder
+API remains available for reusable view functions and programmatically
+generated child groups.
 
 ## Preview limits
 

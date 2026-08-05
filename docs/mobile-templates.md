@@ -112,4 +112,11 @@ For example, an app that performs networking declares
 `android.permission.INTERNET` in its manifest while keeping HTTP/RPC calls and
 response state in Abla. Fire-and-forget and result-bearing Android intents use
 the copied effect/request-event boundaries described in the design spec; they
-are not template nodes and never carry Abla handles.
+are not template nodes and never carry Abla handles. The typed build API is
+documented in [Android application builds](android-builds.md).
+
+Multi-screen applications use the same closure. An ordinary captured variable
+can select Home, Detail, or Settings content through `<If>` groups while a
+dynamic `Screen.title` follows it. `examples/multiscreen` demonstrates three
+screens, persistent state across navigation, and no activity-per-screen or
+host-owned navigation model.

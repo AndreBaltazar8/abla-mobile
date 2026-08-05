@@ -1,0 +1,46 @@
+import "../src/android_build.ab"
+
+val androidConfigurationWritten = #mobileWriteAndroidPackage(
+    MobileAndroidConfiguration(
+        "configuration-fixture",
+        "tests/native/mobile_loop.ab",
+        "build/android-config-module",
+        "preview_1",
+        MobileAndroidApplication(
+            "org.abla.mobile.fixture",
+            "A & B <Preview>",
+            42,
+            "2.5:preview=1 #candidate",
+            24,
+            36,
+            36,
+            false,
+            true,
+            true
+        ),
+        MobileAndroidBranding(
+            "@mipmap/app_icon",
+            "@mipmap/app_icon_round",
+            "#123456",
+            "@drawable/splash_icon",
+            "@android:style/Theme.Material.Light.NoActionBar"
+        ),
+        [mobileAndroidInternetPermission(), mobileAndroidCameraPermission()],
+        [
+            mobileAndroidDeepLink("https", "example.com", "/mobile", true),
+            MobileAndroidIntentFilter(
+                ["android.intent.action.SEND"],
+                ["android.intent.category.DEFAULT"],
+                "content",
+                "",
+                "",
+                "image/*",
+                false
+            )
+        ],
+        true,
+        false
+    )
+)
+
+fun main: int = if (androidConfigurationWritten) 0 else 1

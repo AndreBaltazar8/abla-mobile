@@ -1,0 +1,40 @@
+import "../src/android_build.ab"
+
+val variantsBuilt = #mobileBuildAndroidConfigurations([
+    MobileAndroidConfiguration(
+        "variant-fixture-debug",
+        "tests/native/mobile_loop.ab",
+        "build/android-variants-module",
+        "debug",
+        mobileAndroidApplication(
+            "org.abla.mobile.variants.debug",
+            "Variant Debug",
+            7,
+            "0.7.0-debug"
+        ),
+        mobileAndroidBranding("#001122", ""),
+        [],
+        [],
+        true,
+        false
+    ),
+    MobileAndroidConfiguration(
+        "variant-fixture-release",
+        "tests/native/mobile_loop.ab",
+        "build/android-variants-module",
+        "release",
+        mobileAndroidApplication(
+            "org.abla.mobile.variants",
+            "Variant Release",
+            8,
+            "0.8.0"
+        ),
+        mobileAndroidBranding("#221100", ""),
+        [],
+        [],
+        true,
+        false
+    )
+])
+
+fun main: int = if (variantsBuilt) 0 else 1

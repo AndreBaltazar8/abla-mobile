@@ -35,13 +35,10 @@ android {
         versionCode = ablaMobileInt("versionCode")
         versionName = ablaMobileString("versionName")
 
-        ndk {
-            abiFilters += "arm64-v8a"
-        }
-
+        ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake {
-                arguments += "-DABLA_COMPILER_ROOT=${rootProject.layout.projectDirectory.dir("../ablac").asFile.absolutePath}"
+                arguments += "-DABLA_COMPILER_ROOT=${rootProject.layout.projectDirectory.dir("../../../ablac").asFile.absolutePath}"
                 arguments += "-DABLA_APP_OBJECT=${ablaMobileRoot.resolve(ablaMobileString("applicationObject")).absolutePath}"
             }
         }

@@ -10,7 +10,16 @@ compiler=${ABLAC:-$project_root/../ablac/build/ablac}
     --fast --no-cache
 
 nix-shell "$project_root/../ablac/examples/android/shell.nix" --run \
-    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug --console=plain"
+    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug -PablaMobileConfiguration=debug --console=plain"
+
+generated="$project_root/examples/showcase/android-app/build/abla-mobile/debug"
+grep -Fq 'applicationId=org.abla.mobile.showcase' \
+    "$generated/application.properties"
+grep -Fq 'android.permission.INTERNET' "$generated/AndroidManifest.xml"
+grep -Fq 'android:host="mobile.abla.dev"' "$generated/AndroidManifest.xml"
+grep -Fq 'android:pathPrefix="/showcase"' "$generated/AndroidManifest.xml"
+grep -Fq 'android:windowSplashScreenBackground' \
+    "$generated/res/values-v31/abla_mobile.xml"
 
 app_source="$project_root/examples/showcase/android-app/src"
 if find "$app_source" -type f -name '*.kt' -print -quit | grep -q .; then
