@@ -1,5 +1,11 @@
 package org.abla.mobile.host
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
+import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +44,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -48,6 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +65,7 @@ import kotlin.math.roundToInt
 
 @Composable
 fun AblaMobileHost(modifier: Modifier = Modifier) {
+    HandlePlatformEffects()
     val state = NativeBridge.state.collectAsState().value
     when (state) {
         HostState.Loading -> LoadingScreen(modifier)
@@ -67,6 +77,52 @@ fun AblaMobileHost(modifier: Modifier = Modifier) {
                     lightColorScheme(),
             ) {
                 TreeScreen(tree, modifier)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HandlePlatformEffects() {
+    val context = LocalContext.current
+    val view = LocalView.current
+    LaunchedEffect(context, view) {
+        NativeBridge.effects.collect { effect ->
+            when (effect.kind) {
+                1 -> Toast.makeText(
+                    context,
+                    effect.payload,
+                    Toast.LENGTH_SHORT,
+                ).show()
+                2 -> {
+                    val clipboard = context.getSystemService(
+                        ClipboardManager::class.java,
+                    )
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("Abla Mobile", effect.payload),
+                    )
+                }
+                3 -> {
+                    val uri = Uri.parse(effect.payload)
+                    if (uri.scheme == "https" || uri.scheme == "http") {
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        } catch (_: Exception) {
+                            Toast.makeText(
+                                context,
+                                "No app can open this link",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "Only http and https links are allowed",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+                4 -> view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
             }
         }
     }

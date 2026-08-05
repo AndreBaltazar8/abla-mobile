@@ -4,7 +4,11 @@
 #include <string.h>
 
 typedef int64_t (*AblaMobileCallback)(void* context, int64_t value);
-extern int64_t abla_mobile_run(AblaMobileCallback callback, void* context);
+extern int64_t abla_mobile_platform_attach(
+    AblaMobileCallback callback,
+    void* context
+);
+extern int64_t abla_mobile_run(void);
 
 typedef struct ShowcaseHost {
     char* tree;
@@ -41,7 +45,8 @@ static int64_t showcase_callback(void* opaque, int64_t value) {
 
 int main(void) {
     ShowcaseHost host = {0};
-    const int64_t result = abla_mobile_run(showcase_callback, &host);
+    if (abla_mobile_platform_attach(showcase_callback, &host) != 1) return 1;
+    const int64_t result = abla_mobile_run();
     const int valid = result == 0 && host.published == 1 &&
         host.tree != NULL &&
         strstr(host.tree, "Abla Mobile Showcase") != NULL &&

@@ -1,0 +1,25 @@
+// Bounded, fire-and-forget Android services. The noescape C entry copies the
+// UTF-8 payload into Abla Mobile's native queue before returning. The generic
+// host drains that queue at the next event wait; no Abla callback or state
+// pointer is forwarded or retained.
+compile val mobileEffectToastKind = 1
+compile val mobileEffectClipboardKind = 2
+compile val mobileEffectOpenUrlKind = 3
+compile val mobileEffectHapticKind = 4
+
+noescape extern:"c" fun abla_mobile_platform_effect(
+    kind: int,
+    payload: cstring
+): int
+
+fun mobileToast(message: string): bool =
+    abla_mobile_platform_effect(#mobileEffectToastKind, message) == 1
+
+fun mobileCopyText(text: string): bool =
+    abla_mobile_platform_effect(#mobileEffectClipboardKind, text) == 1
+
+fun mobileOpenUrl(url: string): bool =
+    abla_mobile_platform_effect(#mobileEffectOpenUrlKind, url) == 1
+
+fun mobileHaptic(): bool =
+    abla_mobile_platform_effect(#mobileEffectHapticKind, "") == 1

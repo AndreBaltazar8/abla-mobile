@@ -3,7 +3,7 @@ import "../../src/protocol.ab"
 
 // This proof deliberately owns several unrelated locals. Nothing outside this
 // call receives a pointer or handle to them.
-fun mobileLoop(callback: (int) -> int): int {
+fun mobileLoop(): int {
     var count = 0
     var status = "ready"
     var renders = 0
@@ -13,18 +13,10 @@ fun mobileLoop(callback: (int) -> int): int {
         renders = renders + 1
         val tree = "{\"revision\":$renders,\"count\":$count,\"status\":\"$status\"}"
 
-        // Keep callback invocation direct in the exported function. The
-        // foreign ABI guarantees only a synchronously borrowed callback.
-        callback(#mobileHostTreeBegin)
-        var byte = 0
-        while (byte < tree.size) {
-            callback(#mobileHostTreeByteBase + tree[byte])
-            byte = byte + 1
-        }
-        callback(#mobileHostTreeEnd)
+        mobilePublishTree(tree)
 
-        val event = callback(#mobileHostWaitEvent)
-        val eventRevision = callback(#mobileHostEventRevision)
+        val event = mobileWaitEvent()
+        val eventRevision = mobileEventRevision()
         if (event == 1 && eventRevision == renders) {
             count = count + 1
             status = "incremented"

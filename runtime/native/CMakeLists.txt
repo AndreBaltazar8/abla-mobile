@@ -47,6 +47,8 @@ function(abla_mobile_add_android_application target)
     )
     add_library(${target} SHARED
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_android_platform.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_app_host.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_effects.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_bridge.c"
         "${abi_object}"
         "${portable_runtime}"
@@ -74,6 +76,7 @@ function(abla_mobile_add_android_application target)
         -Wl,--exclude-libs,ALL
         -Wl,--gc-sections
         -Wl,--no-undefined
+        -Wl,--version-script=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_exports.map
     )
     target_link_libraries(${target} PRIVATE ${abla_mobile_log_library})
 endfunction()

@@ -1,7 +1,10 @@
+import "abla/bytes"
+import "abla/text"
+
 // Fixed scalar-stream protocol shared by the Abla event loop and native host.
-// Values 256..511 carry one published-tree byte. The remaining values are
-// commands. Keeping this surface scalar lets the process-long application use
-// the existing call-scoped foreign callback ABI without exporting Abla state.
+// Values 256..511 carry one published-tree byte. Abla calls this importable
+// mobile-owned C surface directly; application code sees no callback or host
+// handle and the C transport never receives a pointer to Abla storage.
 
 compile val mobileHostTreeBegin = 1
 compile val mobileHostTreeEnd = 2
@@ -11,13 +14,37 @@ compile val mobileHostEventPayloadSize = 5
 compile val mobileHostEventPayloadByte = 6
 compile val mobileHostTreeByteBase = 256
 
-fun mobilePublishTree(callback: (int) -> int, tree: string): void {
-    callback(#mobileHostTreeBegin)
+noescape extern:"c" fun abla_mobile_host_call(value: int): int
+
+fun mobilePublishTree(tree: string): bool {
+    if (abla_mobile_host_call(#mobileHostTreeBegin) < 0) return false
     var index = 0
-    while (index < tree.size) {
-        callback(#mobileHostTreeByteBase + tree[index])
+    var valid = true
+    while (valid && index < tree.size) {
+        valid = abla_mobile_host_call(
+            #mobileHostTreeByteBase + tree[index]
+        ) >= 0
         index = index + 1
     }
-    callback(#mobileHostTreeEnd)
-    return
+    val finished = abla_mobile_host_call(#mobileHostTreeEnd) >= 0
+    valid && finished
+}
+
+fun mobileWaitEvent(): int =
+    abla_mobile_host_call(#mobileHostWaitEvent)
+
+fun mobileEventRevision(): int =
+    abla_mobile_host_call(#mobileHostEventRevision)
+
+fun mobileEventPayload(): string {
+    val payloadSize = abla_mobile_host_call(#mobileHostEventPayloadSize)
+    val payloadBytes = byteBuffer()
+    var index = 0
+    while (index < payloadSize && index < 4096) {
+        payloadBytes.appendText(utf8Encode(
+            abla_mobile_host_call(#mobileHostEventPayloadByte)
+        ))
+        index = index + 1
+    }
+    payloadBytes.toText()
 }

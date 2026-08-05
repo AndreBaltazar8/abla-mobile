@@ -19,9 +19,17 @@
 #define ABLA_EVENT_PAYLOAD_SIZE 5
 #define ABLA_EVENT_PAYLOAD_BYTE 6
 #define ABLA_TREE_BYTE_BASE 256
+#define ABLA_EFFECT_KIND_LIMIT 4
 
 typedef int64_t (*AblaHostCallback)(void *context, int64_t value);
-typedef int64_t (*AblaMobileRun)(AblaHostCallback callback, void *context);
+typedef int64_t (*AblaMobileRun)(void);
+typedef int64_t (*AblaPlatformAttach)(
+    AblaHostCallback callback,
+    void *context
+);
+typedef int64_t (*AblaEffectNext)(void);
+typedef int64_t (*AblaEffectByte)(int64_t index);
+typedef void (*AblaEffectPop)(void);
 
 typedef struct AblaMobileEvent {
     int64_t revision;
@@ -41,10 +49,20 @@ typedef struct AblaMobileBridge {
     uint8_t *tree;
     size_t tree_size;
     size_t tree_capacity;
+    bool tree_valid;
+    uint8_t effect[ABLA_PAYLOAD_LIMIT];
+    size_t effect_size;
+    int effect_kind;
+    AblaEffectNext effect_next_kind;
+    AblaEffectNext effect_next_size;
+    AblaEffectByte effect_next_byte;
+    AblaEffectPop effect_pop;
     bool started;
     JavaVM *vm;
     jclass bridge_class;
     jmethodID tree_method;
+    jmethodID effect_method;
+    jmethodID failure_method;
 } AblaMobileBridge;
 
 static AblaMobileBridge abla_bridge = {
@@ -54,6 +72,76 @@ static AblaMobileBridge abla_bridge = {
 
 static void abla_log_error(const char *message) {
     __android_log_write(ANDROID_LOG_ERROR, ABLA_LOG_TAG, message);
+}
+
+static JNIEnv *abla_jni_environment(bool *attached) {
+    JNIEnv *environment = NULL;
+    *attached = false;
+    const jint state = (*abla_bridge.vm)->GetEnv(
+        abla_bridge.vm,
+        (void **)&environment,
+        JNI_VERSION_1_6
+    );
+    if (state == JNI_EDETACHED) {
+        if ((*abla_bridge.vm)->AttachCurrentThread(
+            abla_bridge.vm,
+            &environment,
+            NULL
+        ) != JNI_OK) return NULL;
+        *attached = true;
+    } else if (state != JNI_OK) return NULL;
+    return environment;
+}
+
+static jbyteArray abla_jni_bytes(
+    JNIEnv *environment,
+    const uint8_t *bytes,
+    size_t size
+) {
+    if (size > (size_t)INT32_MAX) return NULL;
+    jbyteArray result = (*environment)->NewByteArray(environment, (jsize)size);
+    if (result != NULL && size > 0) {
+        (*environment)->SetByteArrayRegion(
+            environment,
+            result,
+            0,
+            (jsize)size,
+            (const jbyte *)bytes
+        );
+    }
+    return result;
+}
+
+static void abla_finish_jni_call(JNIEnv *environment, bool attached) {
+    if ((*environment)->ExceptionCheck(environment)) {
+        (*environment)->ExceptionDescribe(environment);
+        (*environment)->ExceptionClear(environment);
+        abla_log_error("Kotlin rejected a native Abla callback");
+    }
+    if (attached) (*abla_bridge.vm)->DetachCurrentThread(abla_bridge.vm);
+}
+
+static void abla_publish_failure(const char *message) {
+    abla_log_error(message);
+    bool attached = false;
+    JNIEnv *environment = abla_jni_environment(&attached);
+    if (environment == NULL || abla_bridge.failure_method == NULL) return;
+    const size_t length = strnlen(message, 1024U);
+    jbyteArray bytes = abla_jni_bytes(
+        environment,
+        (const uint8_t *)message,
+        length
+    );
+    if (bytes != NULL) {
+        (*environment)->CallStaticVoidMethod(
+            environment,
+            abla_bridge.bridge_class,
+            abla_bridge.failure_method,
+            bytes
+        );
+        (*environment)->DeleteLocalRef(environment, bytes);
+    }
+    abla_finish_jni_call(environment, attached);
 }
 
 static bool abla_tree_append(uint8_t byte) {
@@ -73,41 +161,18 @@ static bool abla_tree_append(uint8_t byte) {
 }
 
 static void abla_publish_tree(void) {
-    JNIEnv *environment = NULL;
     bool attached = false;
-    const jint state = (*abla_bridge.vm)->GetEnv(
-        abla_bridge.vm,
-        (void **)&environment,
-        JNI_VERSION_1_6
-    );
-    if (state == JNI_EDETACHED) {
-        if ((*abla_bridge.vm)->AttachCurrentThread(
-            abla_bridge.vm,
-            &environment,
-            NULL
-        ) != JNI_OK) {
-            abla_log_error("could not attach Abla mobile thread to JVM");
-            return;
-        }
-        attached = true;
-    } else if (state != JNI_OK) {
+    JNIEnv *environment = abla_jni_environment(&attached);
+    if (environment == NULL) {
         abla_log_error("could not obtain JNIEnv for Abla mobile thread");
         return;
     }
 
-    jbyteArray bytes = (*environment)->NewByteArray(
+    jbyteArray bytes = abla_jni_bytes(
         environment,
-        (jsize)abla_bridge.tree_size
+        abla_bridge.tree,
+        abla_bridge.tree_size
     );
-    if (bytes != NULL && abla_bridge.tree_size > 0) {
-        (*environment)->SetByteArrayRegion(
-            environment,
-            bytes,
-            0,
-            (jsize)abla_bridge.tree_size,
-            (const jbyte *)abla_bridge.tree
-        );
-    }
     if (bytes != NULL) {
         (*environment)->CallStaticVoidMethod(
             environment,
@@ -117,13 +182,68 @@ static void abla_publish_tree(void) {
         );
         (*environment)->DeleteLocalRef(environment, bytes);
     }
-    if ((*environment)->ExceptionCheck(environment)) {
-        (*environment)->ExceptionDescribe(environment);
-        (*environment)->ExceptionClear(environment);
-        abla_log_error("Kotlin rejected an Abla UI tree");
+    abla_finish_jni_call(environment, attached);
+}
+
+static void abla_publish_effect(void) {
+    __android_log_print(
+        ANDROID_LOG_DEBUG,
+        ABLA_LOG_TAG,
+        "Abla effect %d (%zu bytes)",
+        abla_bridge.effect_kind,
+        abla_bridge.effect_size
+    );
+    bool attached = false;
+    JNIEnv *environment = abla_jni_environment(&attached);
+    if (environment == NULL) {
+        abla_log_error("could not obtain JNIEnv for an Abla effect");
+        return;
     }
-    if (attached) {
-        (*abla_bridge.vm)->DetachCurrentThread(abla_bridge.vm);
+    jbyteArray bytes = abla_jni_bytes(
+        environment,
+        abla_bridge.effect,
+        abla_bridge.effect_size
+    );
+    if (bytes != NULL) {
+        (*environment)->CallStaticVoidMethod(
+            environment,
+            abla_bridge.bridge_class,
+            abla_bridge.effect_method,
+            (jint)abla_bridge.effect_kind,
+            bytes
+        );
+        (*environment)->DeleteLocalRef(environment, bytes);
+    }
+    abla_finish_jni_call(environment, attached);
+}
+
+static void abla_drain_platform_effects(void) {
+    if (abla_bridge.effect_next_kind == NULL) return;
+    int64_t kind = abla_bridge.effect_next_kind();
+    while (kind != 0) {
+        const int64_t size = abla_bridge.effect_next_size();
+        if (kind < 1 || kind > ABLA_EFFECT_KIND_LIMIT || size < 0 ||
+            size > ABLA_PAYLOAD_LIMIT) {
+            abla_bridge.effect_pop();
+            abla_publish_failure("libabla_app.so produced an invalid effect");
+            return;
+        }
+        abla_bridge.effect_kind = (int)kind;
+        abla_bridge.effect_size = (size_t)size;
+        for (int64_t index = 0; index < size; ++index) {
+            const int64_t byte = abla_bridge.effect_next_byte(index);
+            if (byte < 0 || byte > 255) {
+                abla_bridge.effect_pop();
+                abla_publish_failure(
+                    "libabla_app.so produced an invalid effect payload"
+                );
+                return;
+            }
+            abla_bridge.effect[index] = (uint8_t)byte;
+        }
+        abla_bridge.effect_pop();
+        abla_publish_effect();
+        kind = abla_bridge.effect_next_kind();
     }
 }
 
@@ -131,21 +251,29 @@ static int64_t abla_host_callback(void *context, int64_t value) {
     (void)context;
     if (value == ABLA_TREE_BEGIN) {
         abla_bridge.tree_size = 0;
+        abla_bridge.tree_valid = true;
         return 0;
     }
     if (value >= ABLA_TREE_BYTE_BASE &&
         value <= ABLA_TREE_BYTE_BASE + 255) {
         if (!abla_tree_append((uint8_t)(value - ABLA_TREE_BYTE_BASE))) {
-            abla_log_error("Abla UI tree exceeded its native byte limit");
+            abla_bridge.tree_valid = false;
             return -1;
         }
         return 0;
     }
     if (value == ABLA_TREE_END) {
+        if (!abla_bridge.tree_valid) {
+            abla_publish_failure(
+                "Abla UI tree exceeded its native byte/allocation limit"
+            );
+            return -1;
+        }
         abla_publish_tree();
         return 0;
     }
     if (value == ABLA_WAIT_EVENT) {
+        abla_drain_platform_effects();
         pthread_mutex_lock(&abla_bridge.mutex);
         while (abla_bridge.event_size == 0) {
             pthread_cond_wait(
@@ -182,17 +310,51 @@ static void *abla_mobile_thread(void *unused) {
     (void)unused;
     void *library = dlopen("libabla_app.so", RTLD_NOW | RTLD_LOCAL);
     if (library == NULL) {
-        abla_log_error(dlerror());
+        abla_publish_failure(dlerror());
         return NULL;
     }
     AblaMobileRun run = (AblaMobileRun)dlsym(library, "abla_mobile_run");
     if (run == NULL) {
-        abla_log_error("libabla_app.so does not export abla_mobile_run");
+        abla_publish_failure("libabla_app.so does not export abla_mobile_run");
         dlclose(library);
         return NULL;
     }
-    (void)run(abla_host_callback, &abla_bridge);
+    AblaPlatformAttach attach = (AblaPlatformAttach)dlsym(
+        library,
+        "abla_mobile_platform_attach"
+    );
+    if (attach == NULL || attach(abla_host_callback, &abla_bridge) != 1) {
+        abla_publish_failure("could not attach the Abla Mobile host runtime");
+        dlclose(library);
+        return NULL;
+    }
+    abla_bridge.effect_next_kind = (AblaEffectNext)dlsym(
+        library,
+        "abla_mobile_platform_effect_next_kind"
+    );
+    abla_bridge.effect_next_size = (AblaEffectNext)dlsym(
+        library,
+        "abla_mobile_platform_effect_next_size"
+    );
+    abla_bridge.effect_next_byte = (AblaEffectByte)dlsym(
+        library,
+        "abla_mobile_platform_effect_next_byte"
+    );
+    abla_bridge.effect_pop = (AblaEffectPop)dlsym(
+        library,
+        "abla_mobile_platform_effect_pop"
+    );
+    if (abla_bridge.effect_next_kind == NULL ||
+        abla_bridge.effect_next_size == NULL ||
+        abla_bridge.effect_next_byte == NULL ||
+        abla_bridge.effect_pop == NULL) {
+        abla_publish_failure("libabla_app.so is missing platform effects ABI");
+        dlclose(library);
+        return NULL;
+    }
+    (void)run();
     dlclose(library);
+    abla_publish_failure("abla_mobile_run returned unexpectedly");
     return NULL;
 }
 
@@ -224,6 +386,23 @@ Java_org_abla_mobile_host_NativeBridge_start(
         "([B)V"
     );
     if (abla_bridge.tree_method == NULL) {
+        pthread_mutex_unlock(&abla_bridge.mutex);
+        return JNI_FALSE;
+    }
+    abla_bridge.effect_method = (*environment)->GetStaticMethodID(
+        environment,
+        abla_bridge.bridge_class,
+        "onEffectFromNative",
+        "(I[B)V"
+    );
+    abla_bridge.failure_method = (*environment)->GetStaticMethodID(
+        environment,
+        abla_bridge.bridge_class,
+        "onFailureFromNative",
+        "([B)V"
+    );
+    if (abla_bridge.effect_method == NULL ||
+        abla_bridge.failure_method == NULL) {
         pthread_mutex_unlock(&abla_bridge.mutex);
         return JNI_FALSE;
     }
@@ -286,4 +465,3 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     abla_bridge.vm = vm;
     return JNI_VERSION_1_6;
 }
-

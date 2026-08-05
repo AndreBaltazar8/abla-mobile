@@ -16,8 +16,10 @@ mkdir -p "$output_directory"
 
 "$native_compiler" \
     "$project_root/tests/native/mobile_loop.c" \
+    "$project_root/runtime/native/abla_mobile_app_host.c" \
     -L"$output_directory" \
     -Wl,-rpath,"$output_directory" \
+    -Wl,--export-dynamic \
     -labla_mobile_test \
     -o "$output_directory/mobile-loop-test"
 
@@ -25,11 +27,9 @@ mkdir -p "$output_directory"
 
 grep -q '"symbol":"abla_mobile_run"' \
     "$output_directory/libabla_mobile_test.so.abi.json"
-grep -q '"abi":"callback"' \
-    "$output_directory/libabla_mobile_test.so.abi.json"
-
-if grep -q 'handle' "$output_directory/libabla_mobile_test.so.abi.json"; then
-    echo "unexpected handle ABI in mobile loop proof" >&2
+if grep -Eq 'callback|handle' \
+    "$output_directory/libabla_mobile_test.so.abi.json"; then
+    echo "unexpected callback or handle ABI in mobile loop proof" >&2
     exit 1
 fi
 

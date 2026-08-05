@@ -4,10 +4,11 @@
 
 typedef int64_t (*abla_mobile_callback)(void *context, int64_t value);
 
-extern int64_t abla_mobile_run(
+extern int64_t abla_mobile_platform_attach(
     abla_mobile_callback callback,
     void *context
 );
+extern int64_t abla_mobile_run(void);
 
 typedef struct MobileProofHost {
     char tree[1024];
@@ -45,7 +46,11 @@ static int64_t mobile_host_callback(void *opaque, int64_t value) {
 
 int main(void) {
     MobileProofHost host = {0};
-    const int64_t result = abla_mobile_run(mobile_host_callback, &host);
+    if (abla_mobile_platform_attach(mobile_host_callback, &host) != 1) {
+        fputs("could not attach mobile proof host\n", stderr);
+        return 1;
+    }
+    const int64_t result = abla_mobile_run();
     const int valid = result == 42 && host.published == 3 &&
         strstr(host.tree, "\"count\":2") != NULL &&
         strstr(host.tree, "\"status\":\"incremented\"") != NULL;
@@ -62,4 +67,3 @@ int main(void) {
     puts("mobile loop proof: 3 renders, 2 events, no app handle");
     return 0;
 }
-

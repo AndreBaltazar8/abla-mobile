@@ -16,8 +16,11 @@ mkdir -p "$output_directory"
 
 "$native_compiler" \
     "$project_root/tests/native/showcase.c" \
+    "$project_root/runtime/native/abla_mobile_app_host.c" \
+    "$project_root/runtime/native/abla_mobile_platform_effects.c" \
     -L"$output_directory" \
     -Wl,-rpath,"$output_directory" \
+    -Wl,--export-dynamic \
     -labla_mobile_showcase \
     -o "$output_directory/showcase-test"
 

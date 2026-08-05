@@ -1,7 +1,6 @@
 import "abla/build"
-import "abla/bytes"
-import "abla/text"
 import "../../../src/protocol.ab"
+import "../../../src/platform.ab"
 import "../../../src/runtime.ab"
 import "../../../src/ui.ab"
 
@@ -17,6 +16,10 @@ compile val eventAddItem = 9
 compile val eventRemoveItem = 10
 compile val eventAdvance = 11
 compile val eventCelebrate = 12
+compile val eventToast = 13
+compile val eventCopy = 14
+compile val eventHaptic = 15
+compile val eventOpenUrl = 16
 
 fun showcaseParseInt(text: string, fallback: int): int {
     var valid = text.size > 0
@@ -188,6 +191,41 @@ fun showcaseRender(
                 "architecture-copy",
                 "Counter, text, preferences, progress, navigation and list state are independent Abla variables. Android receives only this immutable presentation tree.",
                 "body"
+            ),
+            mobileText(
+                "platform-copy",
+                "These buttons ask Android to act through bounded copied messages.",
+                "body"
+            ),
+            mobileRow("platform-actions", 8, [
+                mobileButton(
+                    "toast",
+                    "Toast",
+                    #eventToast,
+                    true,
+                    "filled"
+                ),
+                mobileButton(
+                    "copy",
+                    "Copy",
+                    #eventCopy,
+                    true,
+                    "outlined"
+                ),
+                mobileButton(
+                    "haptic",
+                    "Haptic",
+                    #eventHaptic,
+                    true,
+                    "text"
+                )
+            ]),
+            mobileButton(
+                "open-url",
+                "Open Abla on GitHub",
+                #eventOpenUrl,
+                true,
+                "outlined"
             )
         ]),
         mobileProgress("busy-indicator", 1, 1, true),
@@ -221,10 +259,10 @@ fun showcaseRender(
     )
 }
 
-// One process-long call owns every application variable. The callback is
-// borrowed for this call and invoked directly, satisfying the existing Abla
-// foreign ABI without creating an application/state handle.
-fun showcaseMobileRun(callback: (int) -> int): int {
+// One process-long call owns every application variable. Importable Abla
+// Mobile functions reach its native runtime through arbitrary C externs; the
+// entrypoint exports no callback, application object, or state handle.
+fun showcaseMobileRun(): int {
     // The importable mobile runtime owns the managed limit and explicit
     // safepoint used by this process-long exported call.
     mobileConfigureRuntime(268435456)
@@ -255,27 +293,12 @@ fun showcaseMobileRun(callback: (int) -> int): int {
             status
         )
 
-        callback(#mobileHostTreeBegin)
-        var treeByte = 0
-        while (treeByte < tree.size) {
-            callback(#mobileHostTreeByteBase + tree[treeByte])
-            treeByte = treeByte + 1
-        }
-        callback(#mobileHostTreeEnd)
+        mobilePublishTree(tree)
         mobileRuntimeSafepoint()
 
-        val event = callback(#mobileHostWaitEvent)
-        val eventRevision = callback(#mobileHostEventRevision)
-        val payloadSize = callback(#mobileHostEventPayloadSize)
-        val payloadBytes = byteBuffer()
-        var payloadByte = 0
-        while (payloadByte < payloadSize && payloadByte < 4096) {
-            payloadBytes.appendText(utf8Encode(
-                callback(#mobileHostEventPayloadByte)
-            ))
-            payloadByte = payloadByte + 1
-        }
-        val payload = payloadBytes.toText()
+        val event = mobileWaitEvent()
+        val eventRevision = mobileEventRevision()
+        val payload = mobileEventPayload()
 
         if (event == 0) running = false
         // A widget can enqueue several edits (IME composition or slider
@@ -334,6 +357,24 @@ fun showcaseMobileRun(callback: (int) -> int): int {
             }
             if (event == #eventCelebrate && progress >= 100) {
                 status = "🎉 Abla drove this whole screen!"
+            }
+            if (event == #eventToast) {
+                mobileToast("Hello from Abla")
+                status = "Abla requested an Android toast"
+            }
+            if (event == #eventCopy) {
+                mobileCopyText("Copied by Abla Mobile")
+                status = "Abla copied text through Android"
+            }
+            if (event == #eventHaptic) {
+                mobileHaptic()
+                status = "Abla requested Android haptics"
+            }
+            if (event == #eventOpenUrl) {
+                mobileOpenUrl(
+                    "https://github.com/AndreBaltazar8/abla"
+                )
+                status = "Abla requested a safe browser intent"
             }
         }
     }
