@@ -130,6 +130,16 @@ compile fun mobileAndroidArm64Target(): bool = defineTarget(
     false
 )
 
+compile fun mobileAndroidX86_64Target(): bool = defineTarget(
+    "abla-mobile-android-x86_64",
+    "x86_64-linux-android24",
+    "elf",
+    "lld-elf",
+    "x86_64linux",
+    false,
+    false
+)
+
 compile fun mobileAndroidXml(value: string): string {
     var escaped = ""
     var index = 0
@@ -277,7 +287,7 @@ compile fun mobileAndroidProperties(
     configuration: MobileAndroidConfiguration
 ): string {
     val application = configuration.application
-    "namespace=${mobileAndroidProperty(application.applicationId)}\napplicationId=${mobileAndroidProperty(application.applicationId)}\ncompileSdk=${application.compileSdk}\nminSdk=${application.minSdk}\ntargetSdk=${application.targetSdk}\nversionCode=${application.versionCode}\nversionName=${mobileAndroidProperty(application.versionName)}\napplicationObject=obj/arm64-v8a/abla_app.o\nmanifest=AndroidManifest.xml\nresources=res\n"
+    "namespace=${mobileAndroidProperty(application.applicationId)}\napplicationId=${mobileAndroidProperty(application.applicationId)}\ncompileSdk=${application.compileSdk}\nminSdk=${application.minSdk}\ntargetSdk=${application.targetSdk}\nversionCode=${application.versionCode}\nversionName=${mobileAndroidProperty(application.versionName)}\napplicationObject=obj/arm64-v8a/abla_app.o\napplicationObjectRoot=obj\nmanifest=AndroidManifest.xml\nresources=res\n"
 }
 
 compile fun mobileWriteAndroidPackage(
@@ -333,7 +343,7 @@ compile fun mobileBuildAndroidConfigurations(
     configurations: array<MobileAndroidConfiguration>
 ): bool {
     if (configurations.size == 0) return false
-    var built = mobileAndroidArm64Target()
+    var built = mobileAndroidArm64Target() && mobileAndroidX86_64Target()
     var index = 0
     while (built && index < configurations.size) {
         val configuration = configurations[index]
@@ -345,6 +355,18 @@ compile fun mobileBuildAndroidConfigurations(
                 configuration.entry,
                 "$root/obj/arm64-v8a/abla_app.o",
                 "abla-mobile-android-arm64",
+                "object",
+                configuration.fast,
+                configuration.cache
+            )
+        }
+        if (built) {
+            val root = "${configuration.module}/build/abla-mobile/${configuration.variant}"
+            built = buildProgram(
+                "${configuration.name}-x86_64",
+                configuration.entry,
+                "$root/obj/x86_64/abla_app.o",
+                "abla-mobile-android-x86_64",
                 "object",
                 configuration.fast,
                 configuration.cache
