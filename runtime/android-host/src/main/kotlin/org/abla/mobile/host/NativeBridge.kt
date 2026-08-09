@@ -111,6 +111,7 @@ internal object NativeBridge {
                     connection.setRequestProperty("Accept", "text/plain")
                     if (method == "POST") {
                         connection.doOutput = true
+                        connection.setFixedLengthStreamingMode(bodyBytes.size)
                         connection.setRequestProperty(
                             "Content-Type",
                             "text/plain; charset=utf-8",
