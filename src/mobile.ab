@@ -10,11 +10,21 @@ import "ui.ab"
 class MobileView(
     val title: string,
     val darkTheme: bool,
-    val root: MobileNode
+    val root: MobileNode,
+    val showTopBar: bool,
+    val background: string
 )
 
 fun mobileView(title: string, darkTheme: bool, root: MobileNode): MobileView =
-    MobileView(title, darkTheme, root)
+    MobileView(title, darkTheme, root, true, "")
+
+fun mobileStyledView(
+    title: string,
+    darkTheme: bool,
+    root: MobileNode,
+    showTopBar: bool,
+    background: string
+): MobileView = MobileView(title, darkTheme, root, showTopBar, background)
 
 fun mobileString(value: any): string = "$value"
 
@@ -99,11 +109,13 @@ fun mobileRun(
     while (running) {
         val view = application(event, payload)
         revision = revision + 1
-        mobilePublishTree(mobileEncodeTree(
+        mobilePublishTree(mobileEncodeStyledTree(
             revision,
             view.title,
             view.darkTheme,
-            view.root
+            view.root,
+            view.showTopBar,
+            view.background
         ))
         mobileRuntimeSafepoint()
 
@@ -159,11 +171,31 @@ compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
     if ((name == "key" || name == "visible") &&
         tag != "Screen" && tag != "If") return true
     if (tag == "Screen") return name == "title" || name == "dark" ||
-        name == "onHttp"
+        name == "onHttp" || name == "onEvent" || name == "showTopBar" ||
+        name == "background"
     if (tag == "Column") return name == "padding" || name == "spacing" ||
-        name == "scroll"
-    if (tag == "Row") return name == "spacing"
-    if (tag == "Text") return name == "style" || name == "text"
+        name == "scroll" || name == "compact"
+    if (tag == "Row") return name == "spacing" || name == "arrangement" ||
+        name == "padding" || name == "fullWidth"
+    if (tag == "Text") return name == "style" || name == "text" ||
+        name == "color" || name == "size" || name == "weight" ||
+        name == "align" || name == "maxLines"
+    if (tag == "Image") return name == "source" || name == "description" ||
+        name == "height" || name == "width" || name == "radius" ||
+        name == "scale"
+    if (tag == "Surface") return name == "background" || name == "radius" ||
+        name == "padding" || name == "spacing" || name == "height" ||
+        name == "compact" || name == "onTap"
+    if (tag == "Grid") return name == "columns" || name == "spacing"
+    if (tag == "MediaCard") return name == "source" || name == "title" ||
+        name == "subtitle" || name == "height" || name == "radius" ||
+        name == "onTap"
+    if (tag == "ActionGrid") return name == "labels" || name == "columns" ||
+        name == "spacing" || name == "height" || name == "onTap"
+    if (tag == "WebView") return name == "source" || name == "height" ||
+        name == "radius" || name == "background"
+    if (tag == "PulseBadge") return name == "text" || name == "background" ||
+        name == "color" || name == "accent"
     if (tag == "Button") return name == "enabled" || name == "appearance" ||
         name == "onTap" || name == "text"
     if (tag == "TextField") return name == "label" || name == "value" ||
@@ -184,7 +216,7 @@ compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
 
 compile fun mobileTemplateIsContainer(tag: string): bool =
     tag == "Screen" || tag == "Column" || tag == "Row" || tag == "Card" ||
-    tag == "List" || tag == "If"
+    tag == "List" || tag == "If" || tag == "Surface" || tag == "Grid"
 
 compile fun mobileTemplateIsTextual(tag: string): bool =
     tag == "Text" || tag == "Button" || tag == "Chip"
@@ -193,10 +225,12 @@ compile fun mobileTemplateKnownTag(tag: string): bool =
     mobileTemplateIsContainer(tag) || mobileTemplateIsTextual(tag) ||
     tag == "TextField" || tag == "Switch" || tag == "Checkbox" ||
     tag == "Slider" || tag == "Progress" || tag == "Divider" ||
-    tag == "Spacer"
+    tag == "Spacer" || tag == "Image" || tag == "MediaCard" ||
+    tag == "ActionGrid" || tag == "WebView" || tag == "PulseBadge"
 
 compile fun mobileTemplateIsActionAttribute(name: string): bool =
-    name == "onTap" || name == "onChange" || name == "onHttp"
+    name == "onTap" || name == "onChange" || name == "onHttp" ||
+    name == "onEvent"
 
 compile fun mobileTemplateParseActionBody(
     cursor: ParserCursor,
@@ -433,7 +467,7 @@ compile fun mobileTemplateParseNode(
         }
         var root = mobileTemplateCall("mobileGroup", [syntaxArray([])])
         if (children.size > 0) root = children[0]
-        result = mobileTemplateCall("mobileView", [
+        result = mobileTemplateCall("mobileStyledView", [
             mobileTemplateAttribute(
                 names,
                 values,
@@ -446,7 +480,13 @@ compile fun mobileTemplateParseNode(
                 "dark",
                 syntaxBoolean(false)
             ),
-            root
+            root,
+            mobileTemplateAttribute(
+                names, values, "showTopBar", syntaxBoolean(true)
+            ),
+            mobileTemplateAttribute(
+                names, values, "background", syntaxString("")
+            )
         ])
         val completion = mobileTemplateAttributeIndex(names, "onHttp")
         if (completion >= 0) {
@@ -456,23 +496,118 @@ compile fun mobileTemplateParseNode(
             actionIds.append(-2)
             actions.append(values[completion])
         }
+        val genericEvent = mobileTemplateAttributeIndex(names, "onEvent")
+        if (genericEvent >= 0) {
+            if (!braced[genericEvent]) {
+                parserFail(cursor, "onEvent requires an {Abla action}")
+            }
+            actionIds.append(-3)
+            actions.append(values[genericEvent])
+        }
     }
-    if (tag == "Column") result = mobileTemplateCall("mobileColumn", [
+    if (tag == "Column") result = mobileTemplateCall("mobileStyledColumn", [
         key,
         mobileTemplateAttribute(names, values, "padding", syntaxInteger(0)),
         mobileTemplateAttribute(names, values, "spacing", syntaxInteger(0)),
         mobileTemplateAttribute(names, values, "scroll", syntaxBoolean(false)),
+        mobileTemplateAttribute(names, values, "compact", syntaxBoolean(false)),
         syntaxArray(children)
     ])
-    if (tag == "Row") result = mobileTemplateCall("mobileRow", [
+    if (tag == "Row") result = mobileTemplateCall("mobileStyledRow", [
         key,
         mobileTemplateAttribute(names, values, "spacing", syntaxInteger(0)),
+        mobileTemplateAttribute(
+            names, values, "arrangement", syntaxString("start")
+        ),
+        mobileTemplateAttribute(names, values, "padding", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "fullWidth", syntaxBoolean(true)),
         syntaxArray(children)
     ])
-    if (tag == "Text") result = mobileTemplateCall("mobileText", [
+    if (tag == "Text") result = mobileTemplateCall("mobileStyledText", [
         key,
         content,
-        mobileTemplateAttribute(names, values, "style", syntaxString("body"))
+        mobileTemplateAttribute(names, values, "style", syntaxString("body")),
+        mobileTemplateAttribute(names, values, "color", syntaxString("")),
+        mobileTemplateAttribute(names, values, "size", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "weight", syntaxString("")),
+        mobileTemplateAttribute(names, values, "align", syntaxString("start")),
+        mobileTemplateAttribute(names, values, "maxLines", syntaxInteger(0))
+    ])
+    if (tag == "Image") result = mobileTemplateCall("mobileImage", [
+        key,
+        mobileTemplateAttribute(names, values, "source", syntaxString("")),
+        mobileTemplateAttribute(names, values, "description", syntaxString("")),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "width", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "radius", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "scale", syntaxString("crop"))
+    ])
+    var surfaceEvent = syntaxInteger(0)
+    if (tag == "Surface" &&
+        mobileTemplateAttributeIndex(names, "onTap") >= 0) {
+        surfaceEvent = mobileTemplateAction(
+            cursor, names, values, braced, "onTap", actionIds, actions
+        )
+    }
+    if (tag == "Surface") result = mobileTemplateCall("mobileSurface", [
+        key,
+        mobileTemplateAttribute(names, values, "background", syntaxString("")),
+        mobileTemplateAttribute(names, values, "radius", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "padding", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "spacing", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(0)),
+        mobileTemplateAttribute(names, values, "compact", syntaxBoolean(false)),
+        surfaceEvent,
+        syntaxArray(children)
+    ])
+    if (tag == "Grid") result = mobileTemplateCall("mobileGrid", [
+        key,
+        mobileTemplateAttribute(names, values, "columns", syntaxInteger(2)),
+        mobileTemplateAttribute(names, values, "spacing", syntaxInteger(12)),
+        syntaxArray(children)
+    ])
+    if (tag == "MediaCard") result = mobileTemplateCall("mobileMediaCard", [
+        key,
+        mobileTemplateAttribute(names, values, "source", syntaxString("")),
+        mobileTemplateAttribute(names, values, "title", syntaxString("")),
+        mobileTemplateAttribute(names, values, "subtitle", syntaxString("")),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(190)),
+        mobileTemplateAttribute(names, values, "radius", syntaxInteger(18)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onTap", actionIds, actions
+        )
+    ])
+    if (tag == "ActionGrid") result = mobileTemplateCall("mobileActionGrid", [
+        key,
+        mobileTemplateAttribute(names, values, "labels", syntaxString("")),
+        mobileTemplateAttribute(names, values, "columns", syntaxInteger(3)),
+        mobileTemplateAttribute(names, values, "spacing", syntaxInteger(10)),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(82)),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onTap", actionIds, actions
+        )
+    ])
+    if (tag == "WebView") result = mobileTemplateCall("mobileWebView", [
+        key,
+        mobileTemplateAttribute(names, values, "source", syntaxString("")),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(480)),
+        mobileTemplateAttribute(names, values, "radius", syntaxInteger(22)),
+        mobileTemplateAttribute(
+            names, values, "background", syntaxString("#120D20")
+        )
+    ])
+    if (tag == "PulseBadge") result = mobileTemplateCall("mobilePulseBadge", [
+        key,
+        mobileTemplateAttribute(names, values, "text", syntaxString("LIVE")),
+        mobileTemplateAttribute(
+            names, values, "background", syntaxString("#2A1936")
+        ),
+        mobileTemplateAttribute(
+            names, values, "color", syntaxString("#FF78AE")
+        ),
+        mobileTemplateAttribute(
+            names, values, "accent", syntaxString("#FF78AE")
+        )
     ])
     if (tag == "Button") result = mobileTemplateCall("mobileButton", [
         key,
@@ -579,12 +714,15 @@ compile fun mobileTemplateParse(cursor: ParserCursor): SyntaxExpression {
     val statements: array<SyntaxExpression> = []
     var action = 0
     while (action < actions.size) {
+        val matches = if (actionIds[action] == -3)
+            syntaxBinary(">", syntaxIdentifier("event"), syntaxInteger(0))
+        else syntaxBinary(
+            "==",
+            syntaxIdentifier("event"),
+            syntaxInteger(actionIds[action])
+        )
         statements.append(syntaxIf(
-            syntaxBinary(
-                "==",
-                syntaxIdentifier("event"),
-                syntaxInteger(actionIds[action])
-            ),
+            matches,
             syntaxBlock([actions[action], syntaxInteger(0)]),
             syntaxInteger(0)
         ))

@@ -53,6 +53,24 @@ fun mobileColumn(
     mobileFlattenChildren(children)
 )
 
+fun mobileStyledColumn(
+    key: string,
+    padding: int,
+    spacing: int,
+    scroll: bool,
+    compact: bool,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "column",
+    key,
+    mobileProperties(
+        ["padding", "spacing", "scroll", "compact"],
+        [jsonInteger(padding), jsonInteger(spacing), jsonBoolean(scroll),
+         jsonBoolean(compact)]
+    ),
+    mobileFlattenChildren(children)
+)
+
 fun mobileRow(
     key: string,
     spacing: int,
@@ -61,6 +79,24 @@ fun mobileRow(
     "row",
     key,
     mobileProperties(["spacing"], [jsonInteger(spacing)]),
+    mobileFlattenChildren(children)
+)
+
+fun mobileStyledRow(
+    key: string,
+    spacing: int,
+    arrangement: string,
+    padding: int,
+    fullWidth: bool,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "row",
+    key,
+    mobileProperties(
+        ["spacing", "arrangement", "padding", "fullWidth"],
+        [jsonInteger(spacing), jsonString(arrangement), jsonInteger(padding),
+         jsonBoolean(fullWidth)]
+    ),
     mobileFlattenChildren(children)
 )
 
@@ -74,6 +110,154 @@ fun mobileText(
     mobileProperties(
         ["text", "style"],
         [jsonString(text), jsonString(style)]
+    ),
+    []
+)
+
+fun mobileStyledText(
+    key: string,
+    text: string,
+    style: string,
+    color: string,
+    size: int,
+    weight: string,
+    align: string,
+    maximumLines: int
+): MobileNode = MobileNode(
+    "text",
+    key,
+    mobileProperties(
+        ["text", "style", "color", "size", "weight", "align", "maxLines"],
+        [jsonString(text), jsonString(style), jsonString(color),
+         jsonInteger(size), jsonString(weight), jsonString(align),
+         jsonInteger(maximumLines)]
+    ),
+    []
+)
+
+fun mobileImage(
+    key: string,
+    source: string,
+    description: string,
+    height: int,
+    width: int,
+    radius: int,
+    scale: string
+): MobileNode = MobileNode(
+    "image",
+    key,
+    mobileProperties(
+        ["source", "description", "height", "width", "radius", "scale"],
+        [jsonString(source), jsonString(description), jsonInteger(height),
+         jsonInteger(width), jsonInteger(radius), jsonString(scale)]
+    ),
+    []
+)
+
+fun mobileSurface(
+    key: string,
+    background: string,
+    radius: int,
+    padding: int,
+    spacing: int,
+    height: int,
+    compact: bool,
+    event: int,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "surface",
+    key,
+    mobileProperties(
+        ["background", "radius", "padding", "spacing", "height", "compact", "event"],
+        [jsonString(background), jsonInteger(radius), jsonInteger(padding),
+         jsonInteger(spacing), jsonInteger(height), jsonBoolean(compact),
+         jsonInteger(event)]
+    ),
+    mobileFlattenChildren(children)
+)
+
+fun mobileGrid(
+    key: string,
+    columns: int,
+    spacing: int,
+    children: array<MobileNode>
+): MobileNode = MobileNode(
+    "grid",
+    key,
+    mobileProperties(
+        ["columns", "spacing"],
+        [jsonInteger(columns), jsonInteger(spacing)]
+    ),
+    mobileFlattenChildren(children)
+)
+
+fun mobileMediaCard(
+    key: string,
+    source: string,
+    title: string,
+    subtitle: string,
+    height: int,
+    radius: int,
+    event: int
+): MobileNode = MobileNode(
+    "mediaCard",
+    key,
+    mobileProperties(
+        ["source", "title", "subtitle", "height", "radius", "event"],
+        [jsonString(source), jsonString(title), jsonString(subtitle),
+         jsonInteger(height), jsonInteger(radius), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileActionGrid(
+    key: string,
+    labels: string,
+    columns: int,
+    spacing: int,
+    height: int,
+    event: int
+): MobileNode = MobileNode(
+    "actionGrid",
+    key,
+    mobileProperties(
+        ["labels", "columns", "spacing", "height", "event"],
+        [jsonString(labels), jsonInteger(columns), jsonInteger(spacing),
+         jsonInteger(height), jsonInteger(event)]
+    ),
+    []
+)
+
+fun mobileWebView(
+    key: string,
+    source: string,
+    height: int,
+    radius: int,
+    background: string
+): MobileNode = MobileNode(
+    "webView",
+    key,
+    mobileProperties(
+        ["source", "height", "radius", "background"],
+        [jsonString(source), jsonInteger(height), jsonInteger(radius),
+         jsonString(background)]
+    ),
+    []
+)
+
+fun mobilePulseBadge(
+    key: string,
+    text: string,
+    background: string,
+    color: string,
+    accent: string
+): MobileNode = MobileNode(
+    "pulseBadge",
+    key,
+    mobileProperties(
+        ["text", "background", "color", "accent"],
+        [jsonString(text), jsonString(background), jsonString(color),
+         jsonString(accent)]
     ),
     []
 )
@@ -233,13 +417,25 @@ fun mobileNodeJson(node: MobileNode): Json {
     )
 }
 
+fun mobileEncodeStyledTree(
+    revision: int,
+    title: string,
+    darkTheme: bool,
+    root: MobileNode,
+    showTopBar: bool,
+    background: string
+): string = jsonStringify(jsonObject(
+    ["protocol", "revision", "title", "darkTheme", "showTopBar", "background", "root"],
+    [jsonInteger(1), jsonInteger(revision), jsonString(title),
+     jsonBoolean(darkTheme), jsonBoolean(showTopBar), jsonString(background),
+     mobileNodeJson(root)]
+))
+
 fun mobileEncodeTree(
     revision: int,
     title: string,
     darkTheme: bool,
     root: MobileNode
-): string = jsonStringify(jsonObject(
-    ["protocol", "revision", "title", "darkTheme", "root"],
-    [jsonInteger(1), jsonInteger(revision), jsonString(title),
-     jsonBoolean(darkTheme), mobileNodeJson(root)]
-))
+): string = mobileEncodeStyledTree(
+    revision, title, darkTheme, root, true, ""
+)

@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:hardwareAccelerated="true">
         <activity
             android:name="org.abla.mobile.host.AblaMobileActivity"
             android:exported="true"
@@ -11,4 +11,3 @@
         </activity>
     </application>
 </manifest>
-

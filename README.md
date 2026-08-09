@@ -44,7 +44,9 @@ independent Abla variables.
 
 The generic host currently renders:
 
-- columns, rows, spacers, dividers, text, cards, and keyed lazy lists;
+- columns, rows, spacers, dividers, text, cards, surfaces, grids, and keyed lazy lists;
+- bundled images, media cards, and payload-emitting action grids;
+- local bundled WebView content and platform-local animated pulse badges;
 - filled, outlined, and text buttons;
 - text fields, switches, checkboxes, sliders, and filter chips;
 - linear and circular progress indicators;
@@ -178,7 +180,7 @@ contract-generation details.
   contained and displayed. Native memory faults, signals, and failures on
   unrelated threads remain process failures, so this is still a developer
   preview rather than a production-safety claim.
-- Persistence, runtime permissions, timers, images, dialogs, and custom native
+- Persistence, runtime permissions, timers, dialogs, and custom native
   component registries remain future modules.
 - Contract RPC currently supports one `string` argument/result and text/plain;
   richer JSON shapes, authentication, cancellation, and versioned errors are

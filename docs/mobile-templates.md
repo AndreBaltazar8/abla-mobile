@@ -68,6 +68,14 @@ payload is decoded with `mobileHttpResult(value)` and includes request ID,
 status, body, error, and validity. It executes as event `-2` in the same
 serialized closure before the next whole-root render.
 
+`Screen.onEvent` is the reusable-component event route. It runs for every
+positive semantic event after any matching inline action, with both `event`
+and `value` available to ordinary Abla code. A view function in another file
+can therefore return nodes with stable explicit event IDs while the owning
+state machine handles those IDs in one imported router. This keeps reusable
+interactive view construction out of a monolithic `$mobile` template without
+moving state or callbacks into the host.
+
 The subparser assigns positive event IDs in source traversal order. Event zero
 only renders; a positive event executes its matching action and then evaluates
 the complete view expression again. `mobileRun` publishes that new immutable
@@ -78,10 +86,17 @@ preserve control and list identity across whole-root rerenders.
 
 | Element | Attributes |
 | --- | --- |
-| `Screen` | `title`, `dark`, optional `onHttp`; exactly one root child |
-| `Column` | `key`, `padding`, `spacing`, `scroll`, `visible` |
-| `Row` | `key`, `spacing`, `visible` |
-| `Text` | `key`, `style`, `text`, `visible` |
+| `Screen` | `title`, `dark`, `showTopBar`, `background`, optional `onHttp`, optional `onEvent`; exactly one root child |
+| `Column` | `key`, `padding`, `spacing`, `scroll`, `compact`, `visible` |
+| `Row` | `key`, `spacing`, `arrangement`, `padding`, `fullWidth`, `visible` |
+| `Text` | `key`, `style`, `text`, `color`, `size`, `weight`, `align`, `maxLines`, `visible` |
+| `Image` | `key`, `source`, `description`, `height`, `width`, `radius`, `scale`, `visible` |
+| `Surface` | `key`, `background`, `radius`, `padding`, `spacing`, `height`, `compact`, optional `onTap`, `visible` |
+| `Grid` | `key`, `columns`, `spacing`, `visible` |
+| `MediaCard` | `key`, `source`, `title`, `subtitle`, `height`, `radius`, required `onTap`, `visible` |
+| `ActionGrid` | `key`, `labels`, `columns`, `spacing`, `height`, required `onTap`, `visible` |
+| `WebView` | `key`, `source`, `height`, `radius`, `background`, `visible` |
+| `PulseBadge` | `key`, `text`, `background`, `color`, `accent`, `visible` |
 | `Button` | `key`, `enabled`, `appearance`, `text`, required `onTap`, `visible` |
 | `TextField` | `key`, `label`, `value`, required `onChange`, `visible` |
 | `Switch` | `key`, `label`, `checked`, required `onChange`, `visible` |
@@ -103,6 +118,20 @@ host (`body`, `label`, `headline`, and `display` are used by the showcase).
 Unknown tags, unsupported or duplicate attributes, mismatched closing tags,
 invalid action forms, text in non-text containers, and an invalid `Screen`
 shape fail during parsing.
+
+`Image.source` and `MediaCard.source` are portable logical asset names. The
+Android host resolves them from the application drawable bundle; another host
+can resolve the same name from its native asset catalog. `ActionGrid.labels`
+uses `|` separators and sends the tapped zero-based index in `value`.
+`Row.arrangement` accepts `start`, `center`, `end`, or `spaceBetween`.
+Colors use `#RRGGBB` or `#AARRGGBB` strings.
+
+`WebView.source` is a logical bundled HTML path. The Android renderer only
+accepts safe relative `.html` paths and loads them below `android_asset`; it
+allows same-bundle file subresources but blocks external navigation, content
+access, universal file access, zoom, and DOM storage. Another host can map the same node to its sandboxed native web
+view. `PulseBadge` describes animation intent; the host owns its infinite
+animation clock, so rerenders do not send animation frames through Abla.
 
 ## Lowering boundary
 

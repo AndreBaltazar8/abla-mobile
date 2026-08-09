@@ -6,7 +6,18 @@ import android.content.Intent
 import android.net.Uri
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +29,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -36,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -52,6 +66,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -60,8 +76,18 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import org.json.JSONObject
 
 @Composable
 fun AblaMobileHost(modifier: Modifier = Modifier) {
@@ -178,10 +204,12 @@ private fun FailureScreen(failure: HostState.Failed, modifier: Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TreeScreen(tree: UiTree, modifier: Modifier) {
+    val background = mobileColor(tree.background, MaterialTheme.colorScheme.background)
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = background,
         topBar = {
-            TopAppBar(title = { Text(tree.title) })
+            if (tree.showTopBar) TopAppBar(title = { Text(tree.title) })
         },
     ) { contentPadding ->
         Box(Modifier.fillMaxSize().padding(contentPadding)) {
@@ -259,6 +287,13 @@ private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier
                     RenderNode(tree, child, Modifier.fillMaxWidth())
                 }
             }
+            "image" -> RenderImage(node, tagged)
+            "surface" -> RenderSurface(tree, node, tagged)
+            "grid" -> RenderGrid(tree, node, tagged)
+            "mediaCard" -> RenderMediaCard(tree, node, tagged)
+            "actionGrid" -> RenderActionGrid(tree, node, tagged)
+            "webView" -> RenderWebView(node, tagged)
+            "pulseBadge" -> RenderPulseBadge(node, tagged)
             else -> Text(
                 "Unsupported node: ${node.type}",
                 modifier = tagged,
@@ -302,16 +337,28 @@ private fun RenderColumn(tree: UiTree, node: UiNode, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(node.int("spacing").dp),
     ) {
         node.children.forEach { child ->
-            RenderNode(tree, child, Modifier.fillMaxWidth())
+            RenderNode(
+                tree,
+                child,
+                if (node.bool("compact")) Modifier else Modifier.fillMaxWidth(),
+            )
         }
     }
 }
 
 @Composable
 private fun RenderRow(tree: UiTree, node: UiNode, modifier: Modifier) {
+    val arrangement = when (node.text("arrangement")) {
+        "spaceBetween" -> Arrangement.SpaceBetween
+        "center" -> Arrangement.Center
+        "end" -> Arrangement.End
+        else -> Arrangement.spacedBy(node.int("spacing").dp)
+    }
+    var rowModifier = modifier.padding(node.int("padding").dp)
+    if (node.bool("fullWidth", true)) rowModifier = rowModifier.fillMaxWidth()
     Row(
-        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(node.int("spacing").dp),
+        modifier = rowModifier,
+        horizontalArrangement = arrangement,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         node.children.forEach { child -> RenderNode(tree, child) }
@@ -331,8 +378,302 @@ private fun RenderText(node: UiNode, modifier: Modifier) {
         text = node.text("text"),
         modifier = modifier,
         style = style,
-        fontWeight = if (node.text("style") == "headline") FontWeight.Bold else null,
+        color = mobileColor(node.text("color"), Color.Unspecified),
+        fontSize = if (node.int("size") > 0) node.int("size").sp else
+            androidx.compose.ui.unit.TextUnit.Unspecified,
+        fontWeight = when (node.text("weight")) {
+            "bold" -> FontWeight.Bold
+            "semibold" -> FontWeight.SemiBold
+            "medium" -> FontWeight.Medium
+            else -> if (node.text("style") == "headline") FontWeight.Bold else null
+        },
+        textAlign = when (node.text("align")) {
+            "center" -> TextAlign.Center
+            "end" -> TextAlign.End
+            else -> TextAlign.Start
+        },
+        maxLines = if (node.int("maxLines") > 0) node.int("maxLines") else Int.MAX_VALUE,
     )
+}
+
+@Composable
+private fun RenderImage(node: UiNode, modifier: Modifier) {
+    val context = LocalContext.current
+    val resource = context.resources.getIdentifier(
+        node.text("source"),
+        "drawable",
+        context.packageName,
+    )
+    var imageModifier = modifier
+    if (node.int("height") > 0) imageModifier = imageModifier.height(node.int("height").dp)
+    if (node.int("width") > 0) imageModifier = imageModifier.width(node.int("width").dp)
+    if (node.int("radius") > 0) {
+        imageModifier = imageModifier.clip(RoundedCornerShape(node.int("radius").dp))
+    }
+    if (resource == 0) {
+        Box(
+            imageModifier.background(Color(0xFF2A2344)),
+            contentAlignment = Alignment.Center,
+        ) { Text("?", color = Color.White) }
+    } else {
+        Image(
+            painter = painterResource(resource),
+            contentDescription = node.text("description").ifEmpty { null },
+            modifier = imageModifier,
+            contentScale = when (node.text("scale")) {
+                "fit" -> ContentScale.Fit
+                "fill" -> ContentScale.FillBounds
+                else -> ContentScale.Crop
+            },
+        )
+    }
+}
+
+@Composable
+private fun RenderSurface(tree: UiTree, node: UiNode, modifier: Modifier) {
+    var surfaceModifier = modifier
+    if (node.bool("compact")) surfaceModifier = surfaceModifier.wrapContentWidth()
+    if (node.int("height") > 0) surfaceModifier = surfaceModifier.height(node.int("height").dp)
+    if (node.long("event") > 0L) {
+        surfaceModifier = surfaceModifier.clickable { NativeBridge.dispatch(tree, node) }
+    }
+    Surface(
+        modifier = surfaceModifier,
+        color = mobileColor(node.text("background"), MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(node.int("radius").dp),
+    ) {
+        Column(
+            Modifier.padding(node.int("padding").dp),
+            verticalArrangement = Arrangement.spacedBy(node.int("spacing").dp),
+        ) {
+            node.children.forEach { child ->
+                RenderNode(
+                    tree,
+                    child,
+                    if (node.bool("compact")) Modifier else Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderGrid(tree: UiTree, node: UiNode, modifier: Modifier) {
+    val columns = node.int("columns", 2).coerceIn(1, 6)
+    val spacing = node.int("spacing", 12).dp
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(spacing)) {
+        node.children.chunked(columns).forEach { rowChildren ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(spacing),
+            ) {
+                rowChildren.forEach { child ->
+                    RenderNode(tree, child, Modifier.weight(1f))
+                }
+                repeat(columns - rowChildren.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderMediaCard(tree: UiTree, node: UiNode, modifier: Modifier) {
+    Surface(
+        modifier = modifier.clickable { NativeBridge.dispatch(tree, node) },
+        color = Color(0xFF19132B),
+        shape = RoundedCornerShape(node.int("radius", 18).dp),
+    ) {
+        Box(Modifier.height(node.int("height", 190).dp)) {
+            val imageNode = UiNode(
+                type = "image",
+                key = "${node.key}-image",
+                properties = JSONObject().put("source", node.text("source"))
+                    .put("description", node.text("title"))
+                    .put("height", node.int("height", 190))
+                    .put("radius", node.int("radius", 18)),
+                children = emptyList(),
+            )
+            RenderImage(imageNode, Modifier.fillMaxSize())
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0.35f to Color.Transparent,
+                        1f to Color(0xF20D0718),
+                    ),
+                ),
+            )
+            Column(
+                Modifier.align(Alignment.BottomStart).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Text(
+                    node.text("title"),
+                    color = Color(0xFFFFF8FF),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                val subtitle = node.text("subtitle")
+                if (subtitle.isNotEmpty()) {
+                    Text(subtitle, color = Color(0xFFD0C4E8), fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderWebView(node: UiNode, modifier: Modifier) {
+    val source = node.text("source")
+    val safeSource = source.takeIf {
+        it.matches(Regex("[a-zA-Z0-9_/-]+\\.html")) && !it.contains("..")
+    }
+    if (safeSource == null) {
+        Box(
+            modifier.height(node.int("height", 480).dp)
+                .background(mobileColor(node.text("background"), Color(0xFF120D20))),
+            contentAlignment = Alignment.Center,
+        ) { Text("Game asset unavailable", color = Color(0xFFA99CC4)) }
+        return
+    }
+    val assetUrl = "file:///android_asset/$safeSource"
+    AndroidView(
+        factory = { context ->
+            WebView(context).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(android.graphics.Color.rgb(18, 13, 32))
+                    cornerRadius = node.int("radius", 22) *
+                        context.resources.displayMetrics.density
+                }
+                clipToOutline = true
+                setLayerType(android.view.View.LAYER_TYPE_NONE, null)
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                isFocusable = true
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = false
+                settings.allowContentAccess = false
+                settings.allowFileAccess = true
+                settings.offscreenPreRaster = true
+                @Suppress("DEPRECATION")
+                settings.allowFileAccessFromFileURLs = true
+                @Suppress("DEPRECATION")
+                settings.allowUniversalAccessFromFileURLs = false
+                settings.setSupportZoom(false)
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean = !request.url.toString().startsWith(
+                        "file:///android_asset/games/",
+                    )
+
+                    override fun onPageFinished(view: WebView, url: String) {
+                        view.postVisualStateCallback(
+                            0L,
+                            object : WebView.VisualStateCallback() {
+                                override fun onComplete(requestId: Long) {
+                                    view.invalidate()
+                                }
+                            },
+                        )
+                    }
+                }
+                tag = assetUrl
+                loadUrl(assetUrl)
+                onResume()
+            }
+        },
+        update = { view ->
+            if (view.tag != assetUrl) {
+                view.tag = assetUrl
+                view.loadUrl(assetUrl)
+            }
+        },
+        modifier = modifier.height(node.int("height", 480).dp),
+        onRelease = { it.destroy() },
+    )
+}
+
+@Composable
+private fun RenderPulseBadge(node: UiNode, modifier: Modifier) {
+    val transition = rememberInfiniteTransition(label = "${node.key}-pulse")
+    val pulse by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "${node.key}-alpha",
+    )
+    Surface(
+        modifier = modifier.wrapContentWidth(),
+        color = mobileColor(node.text("background"), Color(0xFF2A1936)),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.width(9.dp).height(9.dp)
+                    .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                    .background(
+                        mobileColor(node.text("accent"), Color(0xFFFF78AE))
+                            .copy(alpha = pulse),
+                        CircleShape,
+                    ),
+            )
+            Text(
+                node.text("text", "LIVE"),
+                color = mobileColor(node.text("color"), Color(0xFFFF78AE)),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenderActionGrid(tree: UiTree, node: UiNode, modifier: Modifier) {
+    val labels = node.text("labels").split('|').filter { it.isNotEmpty() }
+    val columns = node.int("columns", 3).coerceIn(1, 6)
+    val spacing = node.int("spacing", 10).dp
+    val palette = listOf(
+        Color(0xFF4B2B83), Color(0xFF173B57), Color(0xFF5A2546), Color(0xFF5A3A21),
+    )
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(spacing)) {
+        labels.chunked(columns).forEachIndexed { rowIndex, rowLabels ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                rowLabels.forEachIndexed { columnIndex, label ->
+                    val index = rowIndex * columns + columnIndex
+                    Surface(
+                        modifier = Modifier.weight(1f).height(node.int("height", 82).dp)
+                            .clickable { NativeBridge.dispatch(tree, node, index.toString()) },
+                        color = palette[index % palette.size],
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(label, color = Color(0xFFFFF8FF), fontSize = 25.sp,
+                                fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                repeat(columns - rowLabels.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+private fun mobileColor(source: String, fallback: Color): Color {
+    if (!source.startsWith("#")) return fallback
+    return try {
+        Color(android.graphics.Color.parseColor(source))
+    } catch (_: IllegalArgumentException) {
+        fallback
+    }
 }
 
 @Composable

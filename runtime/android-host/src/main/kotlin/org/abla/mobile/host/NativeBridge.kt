@@ -252,6 +252,8 @@ internal data class UiTree(
     val revision: Long,
     val title: String,
     val darkTheme: Boolean,
+    val showTopBar: Boolean,
+    val background: String,
     val root: UiNode,
 ) {
     companion object {
@@ -265,6 +267,8 @@ internal data class UiTree(
                 revision = revision,
                 title = title,
                 darkTheme = source.getBoolean("darkTheme"),
+                showTopBar = source.optBoolean("showTopBar", true),
+                background = source.optString("background", ""),
                 root = UiNode.fromJson(
                     source.getJSONObject("root"),
                     TreeBudget(),
@@ -311,6 +315,13 @@ internal data class UiNode(
             "card",
             "chip",
             "list",
+            "image",
+            "surface",
+            "grid",
+            "mediaCard",
+            "actionGrid",
+            "webView",
+            "pulseBadge",
         )
 
         fun fromJson(

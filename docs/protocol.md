@@ -102,6 +102,8 @@ The root object is:
   "revision": 1,
   "title": "Application title",
   "darkTheme": false,
+  "showTopBar": true,
+  "background": "",
   "root": {
     "type": "column",
     "key": "root",
@@ -131,6 +133,13 @@ types and properties:
 | `card` | `title` |
 | `chip` | `text`, `selected`, `event`, `payload` |
 | `list` | none |
+| `image` | `source`, `description`, `height`, `width`, `radius`, `scale` |
+| `surface` | `background`, `radius`, `padding`, `spacing`, `height`, optional `event` |
+| `grid` | `columns`, `spacing` |
+| `mediaCard` | `source`, `title`, `subtitle`, `height`, `radius`, `event` |
+| `actionGrid` | `labels`, `columns`, `spacing`, `height`, `event` |
+| `webView` | `source`, `height`, `radius`, `background` |
+| `pulseBadge` | `text`, `background`, `color`, `accent` |
 
 Sibling keys must be unique. Unknown node kinds are rejected for protocol 1.
 The host validates all structural limits listed in the design specification
