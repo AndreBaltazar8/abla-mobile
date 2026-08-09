@@ -199,7 +199,7 @@ compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
     if (tag == "Button") return name == "enabled" || name == "appearance" ||
         name == "onTap" || name == "text"
     if (tag == "TextField") return name == "label" || name == "value" ||
-        name == "onChange"
+        name == "secure" || name == "onChange"
     if (tag == "Switch" || tag == "Checkbox") return name == "label" ||
         name == "checked" || name == "onChange"
     if (tag == "Slider") return name == "label" || name == "value" ||
@@ -626,7 +626,8 @@ compile fun mobileTemplateParseNode(
         mobileTemplateAttribute(names, values, "value", syntaxString("")),
         mobileTemplateAction(
             cursor, names, values, braced, "onChange", actionIds, actions
-        )
+        ),
+        mobileTemplateAttribute(names, values, "secure", syntaxBoolean(false))
     ])
     if (tag == "Switch") result = mobileTemplateCall("mobileSwitch", [
         key,

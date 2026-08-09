@@ -283,13 +283,15 @@ fun mobileTextField(
     key: string,
     label: string,
     value: string,
-    event: int
+    event: int,
+    secure: bool = false
 ): MobileNode = MobileNode(
     "textField",
     key,
     mobileProperties(
-        ["label", "value", "event"],
-        [jsonString(label), jsonString(value), jsonInteger(event)]
+        ["label", "value", "event", "secure"],
+        [jsonString(label), jsonString(value), jsonInteger(event),
+         jsonBoolean(secure)]
     ),
     []
 )

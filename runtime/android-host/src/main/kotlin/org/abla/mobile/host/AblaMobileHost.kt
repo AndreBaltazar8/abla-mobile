@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,6 +78,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -320,6 +324,11 @@ private fun RenderTextField(tree: UiTree, node: UiNode, modifier: Modifier) {
         },
         label = { Text(node.text("label")) },
         singleLine = true,
+        visualTransformation = if (node.bool("secure"))
+            PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = if (node.bool("secure"))
+            KeyboardOptions(keyboardType = KeyboardType.Password)
+        else KeyboardOptions.Default,
         modifier = modifier.fillMaxWidth().onFocusChanged {
             focused = it.isFocused
         },

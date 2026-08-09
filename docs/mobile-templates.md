@@ -98,7 +98,7 @@ preserve control and list identity across whole-root rerenders.
 | `WebView` | `key`, `source`, `height`, `radius`, `background`, `visible` |
 | `PulseBadge` | `key`, `text`, `background`, `color`, `accent`, `visible` |
 | `Button` | `key`, `enabled`, `appearance`, `text`, required `onTap`, `visible` |
-| `TextField` | `key`, `label`, `value`, required `onChange`, `visible` |
+| `TextField` | `key`, `label`, `value`, `secure`, required `onChange`, `visible` |
 | `Switch` | `key`, `label`, `checked`, required `onChange`, `visible` |
 | `Checkbox` | `key`, `label`, `checked`, required `onChange`, `visible` |
 | `Slider` | `key`, `label`, `value`, `minimum`, `maximum`, required `onChange`, `visible` |
