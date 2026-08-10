@@ -297,6 +297,7 @@ private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier
             "mediaCard" -> RenderMediaCard(tree, node, tagged)
             "actionGrid" -> RenderActionGrid(tree, node, tagged)
             "webView" -> RenderWebView(node, tagged)
+            "nativeGame" -> RenderNativeGame(node, tagged)
             "pulseBadge" -> RenderPulseBadge(node, tagged)
             else -> Text(
                 "Unsupported node: ${node.type}",
@@ -337,10 +338,15 @@ private fun RenderTextField(tree: UiTree, node: UiNode, modifier: Modifier) {
 
 @Composable
 private fun RenderColumn(tree: UiTree, node: UiNode, modifier: Modifier) {
-    var columnModifier = modifier.padding(node.int("padding").dp)
+    var columnModifier = modifier
     if (node.bool("scroll")) {
-        columnModifier = columnModifier.verticalScroll(rememberScrollState())
+        // A scrolling child must own a finite viewport. Without fillMaxSize a
+        // column nested in a Surface can expand to its complete content and be
+        // clipped by the screen, leaving verticalScroll nothing to scroll.
+        columnModifier = columnModifier.fillMaxSize()
+            .verticalScroll(rememberScrollState())
     }
+    columnModifier = columnModifier.padding(node.int("padding").dp)
     Column(
         modifier = columnModifier,
         verticalArrangement = Arrangement.spacedBy(node.int("spacing").dp),

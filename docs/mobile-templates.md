@@ -96,6 +96,7 @@ preserve control and list identity across whole-root rerenders.
 | `MediaCard` | `key`, `source`, `title`, `subtitle`, `height`, `radius`, required `onTap`, `visible` |
 | `ActionGrid` | `key`, `labels`, `columns`, `spacing`, `height`, required `onTap`, `visible` |
 | `WebView` | `key`, `source`, `height`, `radius`, `background`, `visible` |
+| `NativeGame` | `key`, `game`, `art`, `height`, `radius`, `background`, `accent`, `sound`, `visible` |
 | `PulseBadge` | `key`, `text`, `background`, `color`, `accent`, `visible` |
 | `Button` | `key`, `enabled`, `appearance`, `text`, required `onTap`, `visible` |
 | `TextField` | `key`, `label`, `value`, `secure`, required `onChange`, `visible` |
@@ -132,6 +133,13 @@ allows same-bundle file subresources but blocks external navigation, content
 access, universal file access, zoom, and DOM storage. Another host can map the same node to its sandboxed native web
 view. `PulseBadge` describes animation intent; the host owns its infinite
 animation clock, so rerenders do not send animation frames through Abla.
+
+`NativeGame.game` selects a portable game/scene identifier. Android maps the
+immutable node to the framework's precompiled native engine surface: Compose
+Canvas owns the frame clock, pointer stream, entities, score, lifecycle, and
+optional local audio without passing frame updates or state handles into Abla.
+`background` and `accent` theme the scene. The current reference scenes are
+documented in [native games](native-games.md).
 
 ## Lowering boundary
 

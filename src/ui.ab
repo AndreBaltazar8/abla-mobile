@@ -245,6 +245,27 @@ fun mobileWebView(
     []
 )
 
+fun mobileNativeGame(
+    key: string,
+    game: string,
+    art: string,
+    height: int,
+    radius: int,
+    background: string,
+    accent: string,
+    sound: bool
+): MobileNode = MobileNode(
+    "nativeGame",
+    key,
+    mobileProperties(
+        ["game", "art", "height", "radius", "background", "accent", "sound"],
+        [jsonString(game), jsonString(art), jsonInteger(height),
+         jsonInteger(radius), jsonString(background), jsonString(accent),
+         jsonBoolean(sound)]
+    ),
+    []
+)
+
 fun mobilePulseBadge(
     key: string,
     text: string,

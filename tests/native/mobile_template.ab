@@ -88,6 +88,16 @@ fun mobileTemplateApplication(): int {
                         mobileText("dynamic-item", "Dynamic child group", "body")
                     ])}
                 </List>
+                <NativeGame
+                    key="native-game"
+                    game="orbit_dash"
+                    art="orbit_dash"
+                    height={360}
+                    radius={20}
+                    background="#120D20"
+                    accent="#6DE8C5"
+                    sound={false}
+                />
                 <Spacer key="bottom-space" height={24} />
             </Column>
         </Screen>

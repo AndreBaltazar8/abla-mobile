@@ -42,7 +42,7 @@ compileCapabilities = ["filesystem.write"]
 The call transactionally writes these ignored build inputs under
 `android-app/build/abla-mobile/debug/`:
 
-- the ARM64 Abla application object and ABI sidecars;
+- ARM64 and x86_64 Abla application objects and ABI sidecars;
 - `application.properties` for Gradle package/version/SDK configuration;
 - a generated `AndroidManifest.xml`; and
 - generated title, splash color, and API-31 splash theme resources.
@@ -62,6 +62,12 @@ The app module reads the selected generated directory with
 `-PablaMobileConfiguration=debug`. Its stable Gradle and CMake adapters are
 application packaging boilerplate, not generated Kotlin. See the
 `examples/showcase/android-app` module for the complete consumer.
+
+The generated `applicationObjectRoot` contains one object directory per
+Android ABI. Consumer modules pass that root to
+`abla_mobile_add_android_application` and enable `arm64-v8a` plus `x86_64`;
+CMake selects the object matching `ANDROID_ABI`. This makes the same Abla app
+installable on physical ARM64 devices and standard x86_64 emulators.
 
 ## Configurations and variants
 

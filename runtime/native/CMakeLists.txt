@@ -1,5 +1,9 @@
 function(abla_mobile_add_android_application target)
-    set(one_value_arguments APPLICATION_OBJECT ABLA_COMPILER_ROOT)
+    set(one_value_arguments
+        APPLICATION_OBJECT
+        APPLICATION_OBJECT_ROOT
+        ABLA_COMPILER_ROOT
+    )
     cmake_parse_arguments(
         ABLA_MOBILE
         ""
@@ -11,13 +15,22 @@ function(abla_mobile_add_android_application target)
     if(NOT ABLA_MOBILE_ABLA_COMPILER_ROOT)
         message(FATAL_ERROR "ABLA_COMPILER_ROOT is required")
     endif()
-    if(NOT ABLA_MOBILE_APPLICATION_OBJECT OR
-       NOT EXISTS "${ABLA_MOBILE_APPLICATION_OBJECT}")
+    set(application_object "${ABLA_MOBILE_APPLICATION_OBJECT}")
+    if(ABLA_MOBILE_APPLICATION_OBJECT_ROOT)
+        if(NOT ANDROID_ABI STREQUAL "arm64-v8a" AND
+           NOT ANDROID_ABI STREQUAL "x86_64")
+            message(FATAL_ERROR "Unsupported Abla Mobile ABI: ${ANDROID_ABI}")
+        endif()
+        set(application_object
+            "${ABLA_MOBILE_APPLICATION_OBJECT_ROOT}/${ANDROID_ABI}/abla_app.o"
+        )
+    endif()
+    if(NOT application_object OR NOT EXISTS "${application_object}")
         message(FATAL_ERROR "Build the Abla application object before Gradle")
     endif()
 
     set_source_files_properties(
-        "${ABLA_MOBILE_APPLICATION_OBJECT}"
+        "${application_object}"
         PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE
     )
 
@@ -54,7 +67,7 @@ function(abla_mobile_add_android_application target)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_bridge.c"
         "${abi_object}"
         "${portable_runtime}"
-        "${ABLA_MOBILE_APPLICATION_OBJECT}"
+        "${application_object}"
     )
 
     find_library(abla_mobile_log_library log)

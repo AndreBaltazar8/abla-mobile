@@ -317,7 +317,7 @@ The Android preview is accepted when all of these pass:
 5. multi-screen test walks Home, Detail, Settings, and Home across seven
    renders while preserving independent Abla state;
 6. host showcase test publishes a real template-built tree from compiled Abla;
-7. ARM64 objects and all example APKs build from clean sources;
+7. ARM64 and x86_64 objects and all example APKs build from clean sources;
 8. the application modules contain no Kotlin;
 9. ADB test verifies initial render, event mutation, exact stress-event count,
    GC under pressure, Android effect dispatch, and no fatal log;
@@ -337,7 +337,6 @@ yet for a production safety claim. Remaining independent extensions are:
 
 - native crash reporting and policies for memory faults, signals, and failures
   outside the serialized Abla app thread;
-- x86_64 application object/ABI support for emulators;
 - timers, HTTP cancellation, and lifecycle completion messages;
 - permissions and result-bearing platform services;
 - image/resources, dialogs, navigation stack, and native component registry;

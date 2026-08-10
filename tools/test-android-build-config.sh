@@ -13,6 +13,7 @@ generated="$project_root/build/android-config-module/build/abla-mobile/preview_1
 "$output/configuration-test"
 
 grep -Fq 'versionCode=42' "$generated/application.properties"
+grep -Fq 'applicationObjectRoot=obj' "$generated/application.properties"
 grep -Fq 'versionName=2.5\:preview\=1\ \#candidate' \
     "$generated/application.properties"
 grep -Fq 'A &amp; B &lt;Preview&gt;' \
@@ -34,7 +35,9 @@ echo "typed Android package configuration proof passed"
 
 variants="$project_root/build/android-variants-module/build/abla-mobile"
 test -f "$variants/debug/obj/arm64-v8a/abla_app.o"
+test -f "$variants/debug/obj/x86_64/abla_app.o"
 test -f "$variants/release/obj/arm64-v8a/abla_app.o"
+test -f "$variants/release/obj/x86_64/abla_app.o"
 grep -Fq 'applicationId=org.abla.mobile.variants.debug' \
     "$variants/debug/application.properties"
 grep -Fq 'applicationId=org.abla.mobile.variants' \

@@ -194,6 +194,9 @@ compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
         name == "spacing" || name == "height" || name == "onTap"
     if (tag == "WebView") return name == "source" || name == "height" ||
         name == "radius" || name == "background"
+    if (tag == "NativeGame") return name == "game" || name == "art" ||
+        name == "height" || name == "radius" || name == "background" ||
+        name == "accent" || name == "sound"
     if (tag == "PulseBadge") return name == "text" || name == "background" ||
         name == "color" || name == "accent"
     if (tag == "Button") return name == "enabled" || name == "appearance" ||
@@ -226,7 +229,8 @@ compile fun mobileTemplateKnownTag(tag: string): bool =
     tag == "TextField" || tag == "Switch" || tag == "Checkbox" ||
     tag == "Slider" || tag == "Progress" || tag == "Divider" ||
     tag == "Spacer" || tag == "Image" || tag == "MediaCard" ||
-    tag == "ActionGrid" || tag == "WebView" || tag == "PulseBadge"
+    tag == "ActionGrid" || tag == "WebView" || tag == "NativeGame" ||
+    tag == "PulseBadge"
 
 compile fun mobileTemplateIsActionAttribute(name: string): bool =
     name == "onTap" || name == "onChange" || name == "onHttp" ||
@@ -595,6 +599,20 @@ compile fun mobileTemplateParseNode(
         mobileTemplateAttribute(
             names, values, "background", syntaxString("#120D20")
         )
+    ])
+    if (tag == "NativeGame") result = mobileTemplateCall("mobileNativeGame", [
+        key,
+        mobileTemplateAttribute(names, values, "game", syntaxString("")),
+        mobileTemplateAttribute(names, values, "art", syntaxString("")),
+        mobileTemplateAttribute(names, values, "height", syntaxInteger(480)),
+        mobileTemplateAttribute(names, values, "radius", syntaxInteger(22)),
+        mobileTemplateAttribute(
+            names, values, "background", syntaxString("#120D20")
+        ),
+        mobileTemplateAttribute(
+            names, values, "accent", syntaxString("#A783FF")
+        ),
+        mobileTemplateAttribute(names, values, "sound", syntaxBoolean(true))
     ])
     if (tag == "PulseBadge") result = mobileTemplateCall("mobilePulseBadge", [
         key,

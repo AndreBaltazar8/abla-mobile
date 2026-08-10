@@ -15,9 +15,10 @@ int main(void) {
     const int valid = size > 0 &&
         strstr((const char *)data, "\"protocol\":1") != NULL &&
         strstr((const char *)data, "\"type\":\"textField\"") != NULL &&
-        strstr((const char *)data, "\"type\":\"slider\"") != NULL;
+        strstr((const char *)data, "\"type\":\"slider\"") != NULL &&
+        strstr((const char *)data, "\"type\":\"nativeGame\"") != NULL &&
+        strstr((const char *)data, "\"game\":\"neon_drift\"") != NULL;
     if (!valid) fprintf(stderr, "invalid UI tree: %.*s\n", (int)size, data);
     abla_owned_bytes_release(tree);
     return valid ? 0 : 1;
 }
-

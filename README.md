@@ -9,7 +9,8 @@ the XML-like `$mobile` language and start them with one `mobileRun` call. It
 builds and installs an ARM64 APK, renders a useful Material 3 component set,
 sends events to a process-long Abla state-machine closure, collects managed
 memory under sustained input, and lets Abla request bounded Android effects.
-Application modules contain no Kotlin source.
+Application modules contain no Kotlin source, and the same build emits ARM64
+device plus x86_64 emulator application objects.
 
 The preview also includes copied asynchronous HTTP completions and a shared
 contract full-stack example deployed at `https://abla-svc.oxente.pt`. Request,
@@ -47,6 +48,8 @@ The generic host currently renders:
 - columns, rows, spacers, dividers, text, cards, surfaces, grids, and keyed lazy lists;
 - bundled images, media cards, and payload-emitting action grids;
 - local bundled WebView content and platform-local animated pulse badges;
+- GPU-backed native game scenes with local timing, input, entities, lifecycle,
+  and optional audio;
 - filled, outlined, and text buttons;
 - text fields, switches, checkboxes, sliders, and filter chips;
 - linear and circular progress indicators;
@@ -169,8 +172,8 @@ contract-generation details.
 
 ## Preview limits
 
-- The app object target is ARM64 Android; the reusable host also builds for
-  x86_64, but an x86_64 Abla app target adapter is not included yet.
+- The Android builder emits ARM64 and x86_64 application objects; the reusable
+  CMake adapter selects the matching object for devices and emulators.
 - There is one Abla mobile program and one root UI tree per process.
 - Events and HTTP completions execute serially; HTTP itself runs on four
   bounded host workers.

@@ -8,7 +8,11 @@ fun renderUiTree(): string {
         mobileTextField("name", "Name", "Abla", 2),
         mobileSwitch("theme", "Dark theme", true, 3),
         mobileSlider("volume", "Volume", 65, 0, 100, 4),
-        mobileProgress("progress", 65, 100, false)
+        mobileProgress("progress", 65, 100, false),
+        mobileNativeGame(
+            "native-game", "neon_drift", "neon_drift", 420, 22,
+            "#120D20", "#A783FF", true
+        )
     ]
     mobileEncodeTree(
         7,
@@ -22,4 +26,3 @@ val renderUiTreeExported = #exportFunction(
     "renderUiTree",
     "abla_mobile_test_tree"
 )
-

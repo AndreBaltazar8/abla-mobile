@@ -103,6 +103,10 @@ int main(void) {
         contains(&host, "\"selected\":true") &&
         contains(&host, "Selected state is visible") &&
         contains(&host, "Dynamic child group") &&
+        contains(&host, "\"type\":\"nativeGame\"") &&
+        contains(&host, "\"game\":\"orbit_dash\"") &&
+        contains(&host, "\"art\":\"orbit_dash\"") &&
+        contains(&host, "\"sound\":false") &&
         !contains(&host, "Conditional detail");
 
     if (!valid) {

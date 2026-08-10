@@ -322,6 +322,7 @@ internal data class UiNode(
             "mediaCard",
             "actionGrid",
             "webView",
+            "nativeGame",
             "pulseBadge",
         )
 
