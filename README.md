@@ -48,8 +48,9 @@ The generic host currently renders:
 - columns, rows, spacers, dividers, text, cards, surfaces, grids, and keyed lazy lists;
 - bundled images, media cards, and payload-emitting action grids;
 - local bundled WebView content and platform-local animated pulse badges;
-- GPU-backed native game scenes with local timing, input, entities, lifecycle,
-  and optional audio;
+- GPU-backed native game scenes with fixed-step simulation, AGSL shaders,
+  sprite/particle rendering, missions, terminal states, lifecycle, and
+  synthesized game audio;
 - filled, outlined, and text buttons;
 - text fields, switches, checkboxes, sliders, and filter chips;
 - linear and circular progress indicators;
