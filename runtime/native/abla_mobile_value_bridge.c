@@ -94,8 +94,12 @@ void abla_mobile_value_array_create(
     *out = abla_mobile_core_array_create(values, count);
 }
 
-void abla_mobile_value_object_create(AblaValue *out, uint32_t type_symbol) {
-    *out = abla_mobile_core_object_create(type_symbol);
+void abla_mobile_value_object_create(
+    AblaValue *out,
+    uint32_t type_symbol,
+    size_t field_count
+) {
+    *out = abla_mobile_core_object_create(type_symbol, field_count);
 }
 
 void abla_mobile_value_field_get(
@@ -112,6 +116,14 @@ void abla_mobile_value_field_set(
     const AblaValue *value
 ) {
     abla_mobile_core_field_set(*object, field_symbol, *value);
+}
+
+void abla_mobile_value_field_initialize(
+    const AblaValue *object,
+    uint32_t field_symbol,
+    const AblaValue *value
+) {
+    abla_mobile_core_field_initialize(*object, field_symbol, *value);
 }
 
 void abla_mobile_value_array_set(

@@ -66,6 +66,7 @@
 #define abla_array_set abla_mobile_core_array_set
 #define abla_object_create abla_mobile_core_object_create
 #define abla_field_get abla_mobile_core_field_get
+#define abla_field_initialize abla_mobile_core_field_initialize
 #define abla_field_set abla_mobile_core_field_set
 
 #endif

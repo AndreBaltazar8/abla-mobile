@@ -40,3 +40,16 @@ fun mobileHttpGet(url: string): int = mobileHttpRequest("GET", url)
 
 fun mobileHttpPost(url: string, body: string): int =
     mobileHttpRequest("POST", url, body)
+
+// Small secrets such as opaque refresh tokens are stored by the reusable
+// Android host with an app-private Android Keystore key. Results use the same
+// copied completion event as HTTP requests; no native or Abla handle crosses
+// the platform boundary.
+fun mobileSecureGet(key: string): int =
+    mobileHttpRequest("STOREGET", key, "")
+
+fun mobileSecureSet(key: string, value: string): int =
+    mobileHttpRequest("STORESET", key, value)
+
+fun mobileSecureDelete(key: string): int =
+    mobileHttpRequest("STOREDEL", key, "")

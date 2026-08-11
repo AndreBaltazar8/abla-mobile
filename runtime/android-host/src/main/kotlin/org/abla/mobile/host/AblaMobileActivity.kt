@@ -9,6 +9,7 @@ class AblaMobileActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        NativeBridge.attachContext(applicationContext)
         if (!NativeBridge.start()) {
             NativeBridge.fail(
                 HostFailureKind.Startup,

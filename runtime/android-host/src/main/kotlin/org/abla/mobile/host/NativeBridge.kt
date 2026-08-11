@@ -1,5 +1,6 @@
 package org.abla.mobile.host
 
+import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -31,6 +32,7 @@ internal object NativeBridge {
         { task -> Thread(task, "abla-mobile-http").apply { isDaemon = true } },
     )
     private val mutableState = MutableStateFlow<HostState>(HostState.Loading)
+    @Volatile private var applicationContext: Context? = null
     val state: StateFlow<HostState> = mutableState.asStateFlow()
     private val mutableEffects = MutableSharedFlow<HostEffect>(
         extraBufferCapacity = 32,
@@ -39,6 +41,10 @@ internal object NativeBridge {
 
     init {
         System.loadLibrary("abla_mobile_bridge")
+    }
+
+    fun attachContext(context: Context) {
+        applicationContext = context.applicationContext
     }
 
     external fun start(): Boolean
@@ -82,10 +88,48 @@ internal object NativeBridge {
     ) {
         val method = methodBytes.toString(Charsets.UTF_8)
         val url = urlBytes.toString(Charsets.UTF_8)
-        if (requestId <= 0L || (method != "GET" && method != "POST") ||
+        val secureMethod = method == "STOREGET" || method == "STORESET" ||
+            method == "STOREDEL"
+        if (requestId <= 0L ||
+            (method != "GET" && method != "POST" && !secureMethod) ||
             urlBytes.size > 2048 || bodyBytes.size > 16384
         ) {
             completeHttp(requestId, 0, "", "invalid HTTP request")
+            return
+        }
+        if (secureMethod) {
+            val context = applicationContext
+                ?: return completeHttp(requestId, 0, "", "secure storage is unavailable")
+            try {
+                requestExecutor.execute {
+                    try {
+                        when (method) {
+                            "STOREGET" -> {
+                                val value = SecureStore.get(context, url)
+                                if (value == null) completeHttp(requestId, 404, "", "")
+                                else completeHttp(requestId, 200, value, "")
+                            }
+                            "STORESET" -> {
+                                SecureStore.set(context, url, bodyBytes.toString(Charsets.UTF_8))
+                                completeHttp(requestId, 204, "", "")
+                            }
+                            else -> {
+                                SecureStore.delete(context, url)
+                                completeHttp(requestId, 204, "", "")
+                            }
+                        }
+                    } catch (failure: Exception) {
+                        completeHttp(
+                            requestId,
+                            0,
+                            "",
+                            failure.message ?: failure.javaClass.simpleName,
+                        )
+                    }
+                }
+            } catch (_: RejectedExecutionException) {
+                completeHttp(requestId, 0, "", "platform worker queue is full")
+            }
             return
         }
         val uri = try {

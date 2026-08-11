@@ -47,8 +47,9 @@ declare void @abla_mobile_value_string_static(ptr, ptr, i64)
 declare void @abla_mobile_value_function(ptr, i32)
 declare void @abla_mobile_value_closure(ptr, i32, ptr, i64)
 declare void @abla_mobile_value_array_create(ptr, ptr, i64)
-declare void @abla_mobile_value_object_create(ptr, i32)
+declare void @abla_mobile_value_object_create(ptr, i32, i64)
 declare void @abla_mobile_value_field_get(ptr, ptr, i32)
+declare void @abla_mobile_value_field_initialize(ptr, i32, ptr)
 declare void @abla_mobile_value_field_set(ptr, i32, ptr)
 declare void @abla_mobile_value_array_set(ptr, ptr, ptr)
 declare i64 @abla_mobile_value_as_i64(ptr)
@@ -263,13 +264,18 @@ define void @abla_array_create(ptr sret(%AblaValue) %out, ptr %values, i64 %coun
   ret void
 }
 
-define void @abla_object_create(ptr sret(%AblaValue) %out, i32 %type) {
-  call void @abla_mobile_value_object_create(ptr %out, i32 %type)
+define void @abla_object_create(ptr sret(%AblaValue) %out, i32 %type, i64 %field_count) {
+  call void @abla_mobile_value_object_create(ptr %out, i32 %type, i64 %field_count)
   ret void
 }
 
 define void @abla_field_get(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %object, i32 %field) {
   call void @abla_mobile_value_field_get(ptr %out, ptr %object, i32 %field)
+  ret void
+}
+
+define void @abla_field_initialize(ptr byval(%AblaValue) %object, i32 %field, ptr byval(%AblaValue) %value) {
+  call void @abla_mobile_value_field_initialize(ptr %object, i32 %field, ptr %value)
   ret void
 }
 

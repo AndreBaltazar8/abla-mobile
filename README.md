@@ -12,10 +12,10 @@ memory under sustained input, and lets Abla request bounded Android effects.
 Application modules contain no Kotlin source, and the same build emits ARM64
 device plus x86_64 emulator application objects.
 
-The preview also includes copied asynchronous HTTP completions and a shared
-contract full-stack example deployed at `https://abla-svc.oxente.pt`. Request,
-response, loading, error, and navigation state still remain ordinary Abla
-variables.
+The preview also includes copied asynchronous HTTP completions, Android
+Keystore-backed secure values, and a shared contract full-stack example
+deployed at `https://abla-svc.oxente.pt`. Request, response, loading, error,
+and navigation state still remain ordinary Abla variables.
 
 ## Architecture
 
@@ -64,6 +64,11 @@ Result-bearing `GET`/`POST` work uses integer request IDs and copied completion
 events. `$mobileRpc` consumes an `import contract` call and generates an Abla
 request adapter; reusable Kotlin performs only the bounded Android HTTPS
 mechanism.
+
+`mobileSecureGet`, `mobileSecureSet`, and `mobileSecureDelete` use the same
+copied completion channel. Values are app-private and encrypted with an
+AES-GCM key generated and retained by Android Keystore; this is suitable for
+opaque session refresh tokens without exposing storage handles to Abla.
 
 The host enforces a 1 MiB encoded-tree limit, 4 KiB event/effect payloads, a
 64-event native queue, 4,096 nodes, 64 levels of nesting, and bounded keys,

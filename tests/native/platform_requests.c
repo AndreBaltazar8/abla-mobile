@@ -34,6 +34,11 @@ int main(void) {
     const char *body = "Abla";
     const int64_t first = abla_mobile_http_request(method, url, body);
     const int64_t second = abla_mobile_http_request("GET", url, "");
+    const int64_t secure = abla_mobile_http_request(
+        "STORESET",
+        "refresh_token",
+        "opaque-secret"
+    );
     if (first != 1 || second != 2 ||
         abla_mobile_platform_request_next_id() != first ||
         !copied_equals(
@@ -57,6 +62,16 @@ int main(void) {
     abla_mobile_platform_request_pop();
     if (abla_mobile_platform_request_next_id() != second) {
         fputs("platform request FIFO failed\n", stderr);
+        return 1;
+    }
+    abla_mobile_platform_request_pop();
+    if (abla_mobile_platform_request_next_id() != secure ||
+        !copied_equals(
+            "STORESET",
+            abla_mobile_platform_request_method_size(),
+            abla_mobile_platform_request_method_byte
+        )) {
+        fputs("secure platform request copy failed\n", stderr);
         return 1;
     }
     abla_mobile_platform_request_pop();
