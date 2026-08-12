@@ -41,7 +41,10 @@ fun mobileEventPayload(): string {
     val payloadBytes = byteBuffer()
     var index = 0
     while (index < payloadSize && index < 4096) {
-        payloadBytes.appendText(utf8Encode(
+        // The host exposes the already UTF-8-encoded payload one byte at a
+        // time. Re-encoding each byte as a Unicode scalar corrupts every
+        // non-ASCII sequence (for example, "ç" became "Ã§").
+        payloadBytes.appendText(byteEncode(
             abla_mobile_host_call(#mobileHostEventPayloadByte)
         ))
         index = index + 1

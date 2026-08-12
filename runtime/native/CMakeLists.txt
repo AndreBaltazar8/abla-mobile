@@ -75,6 +75,16 @@ function(abla_mobile_add_android_application target)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
         "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime"
     )
+    file(STRINGS
+        "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime/abla_runtime.h"
+        abla_mobile_field_initialize_declaration
+        REGEX "abla_field_initialize"
+    )
+    if(NOT abla_mobile_field_initialize_declaration)
+        target_compile_definitions(${target} PRIVATE
+            ABLA_MOBILE_LEGACY_OBJECT_ABI=1
+        )
+    endif()
     set_source_files_properties(
         "${portable_runtime}"
         PROPERTIES COMPILE_OPTIONS

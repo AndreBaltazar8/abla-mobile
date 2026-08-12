@@ -15,6 +15,7 @@ typedef struct MobileProofHost {
     size_t tree_size;
     int64_t revision;
     int event_index;
+    size_t payload_index;
     int published;
 } MobileProofHost;
 
@@ -38,9 +39,15 @@ static int64_t mobile_host_callback(void *opaque, int64_t value) {
     }
     if (value == 3) {
         const int64_t events[] = {1, 1, 0};
+        host->payload_index = 0;
         return events[host->event_index++];
     }
     if (value == 4) return host->revision;
+    if (value == 5) return strlen("lançamento");
+    if (value == 6) {
+        const unsigned char payload[] = "lançamento";
+        return payload[host->payload_index++];
+    }
     return 0;
 }
 
@@ -53,7 +60,7 @@ int main(void) {
     const int64_t result = abla_mobile_run();
     const int valid = result == 42 && host.published == 3 &&
         strstr(host.tree, "\"count\":2") != NULL &&
-        strstr(host.tree, "\"status\":\"incremented\"") != NULL;
+        strstr(host.tree, "\"status\":\"lançamento\"") != NULL;
     if (!valid) {
         fprintf(
             stderr,
@@ -64,6 +71,6 @@ int main(void) {
         );
         return 1;
     }
-    puts("mobile loop proof: 3 renders, 2 events, no app handle");
+    puts("mobile loop proof: 3 renders, 2 UTF-8 events, no app handle");
     return 0;
 }

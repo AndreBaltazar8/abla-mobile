@@ -99,7 +99,12 @@ void abla_mobile_value_object_create(
     uint32_t type_symbol,
     size_t field_count
 ) {
+#ifdef ABLA_MOBILE_LEGACY_OBJECT_ABI
+    (void)field_count;
+    *out = abla_mobile_core_object_create(type_symbol);
+#else
     *out = abla_mobile_core_object_create(type_symbol, field_count);
+#endif
 }
 
 void abla_mobile_value_field_get(
@@ -123,7 +128,11 @@ void abla_mobile_value_field_initialize(
     uint32_t field_symbol,
     const AblaValue *value
 ) {
+#ifdef ABLA_MOBILE_LEGACY_OBJECT_ABI
+    abla_mobile_core_field_set(*object, field_symbol, *value);
+#else
     abla_mobile_core_field_initialize(*object, field_symbol, *value);
+#endif
 }
 
 void abla_mobile_value_array_set(

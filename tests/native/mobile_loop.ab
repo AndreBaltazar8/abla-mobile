@@ -17,14 +17,15 @@ fun mobileLoop(): int {
 
         val event = mobileWaitEvent()
         val eventRevision = mobileEventRevision()
+        val payload = mobileEventPayload()
         if (event == 1 && eventRevision == renders) {
             count = count + 1
-            status = "incremented"
+            status = payload
         }
         if (event == 0) running = false
     }
 
-    if (count == 2 && status == "incremented" && renders == 3) 42 else 1
+    if (count == 2 && status == "lançamento" && renders == 3) 42 else 1
 }
 
 val mobileLoopExported = #exportFunction(
