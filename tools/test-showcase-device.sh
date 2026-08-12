@@ -99,23 +99,33 @@ tap_text() {
 
 scroll_down_until_text() {
     local expected=$1
-    local attempt
+    local attempt width height x bottom top
     for attempt in 1 2 3 4 5 6; do
         dump_ui
         if has_text "$expected"; then return 0; fi
-        adb -s "$serial" shell input swipe 540 1900 540 900 250
+        read -r width height < <(adb -s "$serial" shell wm size | \
+            sed -n 's/.*: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' | tail -n 1)
+        x=$((width / 2))
+        bottom=$((height * 4 / 5))
+        top=$((height / 5))
+        adb -s "$serial" shell input swipe "$x" "$bottom" "$x" "$top" 250
     done
     echo "could not scroll to text: $expected" >&2
     return 1
 }
 
 scroll_to_top() {
-    local attempt
+    local attempt width height x bottom top
     for attempt in 1 2 3 4 5 6; do
         adb -s "$serial" shell cmd statusbar collapse
         dump_ui
         if has_text "Abla Mobile Showcase"; then return 0; fi
-        adb -s "$serial" shell input swipe 540 1100 540 1900 200
+        read -r width height < <(adb -s "$serial" shell wm size | \
+            sed -n 's/.*: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' | tail -n 1)
+        x=$((width / 2))
+        bottom=$((height * 4 / 5))
+        top=$((height / 5))
+        adb -s "$serial" shell input swipe "$x" "$top" "$x" "$bottom" 200
     done
     echo "could not scroll back to the application header" >&2
     return 1
@@ -162,7 +172,6 @@ tap_text "Enable notifications"
 wait_for_text "Notifications disabled"
 
 scroll_down_until_text "Volume: 65%"
-adb -s "$serial" shell input swipe 540 1900 540 1300 200
 tap_slider_at_eighty_percent
 wait_for_pattern 'text="Volume: (7[0-9]|8[0-9])%"'
 scroll_down_until_text "Advance"

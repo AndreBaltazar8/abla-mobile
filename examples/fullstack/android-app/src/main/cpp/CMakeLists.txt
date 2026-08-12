@@ -7,6 +7,6 @@ add_subdirectory(
 )
 
 abla_mobile_add_android_application(abla_app
-    APPLICATION_OBJECT "${ABLA_APP_OBJECT}"
+    APPLICATION_OBJECT_ROOT "${ABLA_APP_OBJECT_ROOT}"
     ABLA_COMPILER_ROOT "${ABLA_COMPILER_ROOT}"
 )

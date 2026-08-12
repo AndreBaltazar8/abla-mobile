@@ -5,8 +5,8 @@
 
 target triple = "aarch64-linux-android24"
 
-%AblaValue = type { i32, %AblaPayload }
-%AblaPayload = type { i64, i64, i64, i64 }
+%AblaValue = type { i32, i32, %AblaPayload }
+%AblaPayload = type { i64, i64 }
 
 declare void @abla_mobile_value_void(ptr)
 declare void @abla_mobile_value_null(ptr)
@@ -40,6 +40,14 @@ declare void @abla_mobile_value_cell_set(ptr, ptr, ptr)
 declare void @abla_mobile_value_string_concat(ptr, ptr, ptr)
 declare void @abla_mobile_value_index_get(ptr, ptr, ptr)
 declare void @abla_mobile_value_array_append(ptr, ptr, ptr)
+declare void @abla_mobile_value_array_get(ptr, ptr, ptr)
+declare void @abla_mobile_value_byte_encode(ptr, ptr)
+declare void @abla_mobile_value_utf8_encode_scalar(ptr, ptr)
+declare void @abla_mobile_value_text_find_sequence(ptr, ptr, ptr, ptr, ptr)
+declare void @abla_mobile_value_text_find_byte(ptr, ptr, ptr, ptr, ptr)
+declare void @abla_mobile_value_text_ascii_equal_insensitive(ptr, ptr, ptr)
+declare void @abla_mobile_value_text_read_u32_little_endian(ptr, ptr, ptr)
+declare void @abla_mobile_value_memory_promote_string(ptr, ptr)
 declare void @abla_mobile_value_string_slice(ptr, ptr, ptr, ptr)
 declare void @abla_mobile_value_i64(ptr, i64)
 declare void @abla_mobile_value_bool(ptr, i1)
@@ -52,6 +60,16 @@ declare void @abla_mobile_value_field_get(ptr, ptr, i32)
 declare void @abla_mobile_value_field_initialize(ptr, i32, ptr)
 declare void @abla_mobile_value_field_set(ptr, i32, ptr)
 declare void @abla_mobile_value_array_set(ptr, ptr, ptr)
+declare i64 @abla_mobile_value_string_length_i64(ptr)
+declare i64 @abla_mobile_value_string_get_i64(ptr, i64)
+declare i1 @abla_mobile_value_string_equal_bool(ptr, ptr)
+declare i1 @abla_mobile_value_string_not_equal_bool(ptr, ptr)
+declare i64 @abla_mobile_value_array_length_i64(ptr)
+declare i64 @abla_mobile_value_array_get_i64(ptr, i64)
+declare void @abla_mobile_value_field_get_indexed(ptr, ptr, i32, i64)
+declare i64 @abla_mobile_value_field_get_indexed_i64(ptr, i32, i64)
+declare i1 @abla_mobile_value_field_get_indexed_bool(ptr, i32, i64)
+declare void @abla_mobile_value_field_set_indexed(ptr, i32, i64, ptr)
 declare i64 @abla_mobile_value_as_i64(ptr)
 declare i1 @abla_mobile_value_as_bool(ptr)
 declare ptr @abla_mobile_value_as_cstring(ptr)
@@ -229,6 +247,41 @@ define void @abla_array_append(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) 
   ret void
 }
 
+define void @ablaByteEncode(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %value) {
+  call void @abla_mobile_value_byte_encode(ptr %out, ptr %value)
+  ret void
+}
+
+define void @ablaUtf8EncodeScalar(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %value) {
+  call void @abla_mobile_value_utf8_encode_scalar(ptr %out, ptr %value)
+  ret void
+}
+
+define void @ablaTextFindSequence(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %text, ptr byval(%AblaValue) %sequence, ptr byval(%AblaValue) %begin, ptr byval(%AblaValue) %end) {
+  call void @abla_mobile_value_text_find_sequence(ptr %out, ptr %text, ptr %sequence, ptr %begin, ptr %end)
+  ret void
+}
+
+define void @ablaTextFindByte(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %text, ptr byval(%AblaValue) %byte, ptr byval(%AblaValue) %begin, ptr byval(%AblaValue) %end) {
+  call void @abla_mobile_value_text_find_byte(ptr %out, ptr %text, ptr %byte, ptr %begin, ptr %end)
+  ret void
+}
+
+define void @ablaTextAsciiEqualInsensitive(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %left, ptr byval(%AblaValue) %right) {
+  call void @abla_mobile_value_text_ascii_equal_insensitive(ptr %out, ptr %left, ptr %right)
+  ret void
+}
+
+define void @ablaTextReadU32LittleEndian(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %text, ptr byval(%AblaValue) %offset) {
+  call void @abla_mobile_value_text_read_u32_little_endian(ptr %out, ptr %text, ptr %offset)
+  ret void
+}
+
+define void @ablaRuntimeMemoryPromoteString(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %value) {
+  call void @abla_mobile_value_memory_promote_string(ptr %out, ptr %value)
+  ret void
+}
+
 define void @abla_string_slice(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %a, ptr byval(%AblaValue) %b, ptr byval(%AblaValue) %c) {
   call void @abla_mobile_value_string_slice(ptr %out, ptr %a, ptr %b, ptr %c)
   ret void
@@ -286,6 +339,61 @@ define void @abla_field_set(ptr byval(%AblaValue) %object, i32 %field, ptr byval
 
 define void @abla_array_set(ptr byval(%AblaValue) %array, ptr byval(%AblaValue) %index, ptr byval(%AblaValue) %value) {
   call void @abla_mobile_value_array_set(ptr %array, ptr %index, ptr %value)
+  ret void
+}
+
+define void @abla_array_get(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %array, ptr byval(%AblaValue) %index) {
+  call void @abla_mobile_value_array_get(ptr %out, ptr %array, ptr %index)
+  ret void
+}
+
+define i64 @abla_string_length_i64(ptr byval(%AblaValue) %value) {
+  %result = call i64 @abla_mobile_value_string_length_i64(ptr %value)
+  ret i64 %result
+}
+
+define i64 @abla_string_get_i64(ptr byval(%AblaValue) %value, i64 %index) {
+  %result = call i64 @abla_mobile_value_string_get_i64(ptr %value, i64 %index)
+  ret i64 %result
+}
+
+define i1 @abla_string_equal_bool(ptr byval(%AblaValue) %left, ptr byval(%AblaValue) %right) {
+  %result = call i1 @abla_mobile_value_string_equal_bool(ptr %left, ptr %right)
+  ret i1 %result
+}
+
+define i1 @abla_string_not_equal_bool(ptr byval(%AblaValue) %left, ptr byval(%AblaValue) %right) {
+  %result = call i1 @abla_mobile_value_string_not_equal_bool(ptr %left, ptr %right)
+  ret i1 %result
+}
+
+define i64 @abla_array_length_i64(ptr byval(%AblaValue) %value) {
+  %result = call i64 @abla_mobile_value_array_length_i64(ptr %value)
+  ret i64 %result
+}
+
+define i64 @abla_array_get_i64(ptr byval(%AblaValue) %value, i64 %index) {
+  %result = call i64 @abla_mobile_value_array_get_i64(ptr %value, i64 %index)
+  ret i64 %result
+}
+
+define void @abla_field_get_indexed(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %object, i32 %field, i64 %index) {
+  call void @abla_mobile_value_field_get_indexed(ptr %out, ptr %object, i32 %field, i64 %index)
+  ret void
+}
+
+define i64 @abla_field_get_indexed_i64(ptr byval(%AblaValue) %object, i32 %field, i64 %index) {
+  %result = call i64 @abla_mobile_value_field_get_indexed_i64(ptr %object, i32 %field, i64 %index)
+  ret i64 %result
+}
+
+define i1 @abla_field_get_indexed_bool(ptr byval(%AblaValue) %object, i32 %field, i64 %index) {
+  %result = call i1 @abla_mobile_value_field_get_indexed_bool(ptr %object, i32 %field, i64 %index)
+  ret i1 %result
+}
+
+define void @abla_field_set_indexed(ptr byval(%AblaValue) %object, i32 %field, i64 %index, ptr byval(%AblaValue) %value) {
+  call void @abla_mobile_value_field_set_indexed(ptr %object, i32 %field, i64 %index, ptr %value)
   ret void
 }
 

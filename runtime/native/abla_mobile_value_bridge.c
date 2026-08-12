@@ -47,6 +47,64 @@ MOBILE_VALUE2(cell_set)
 MOBILE_VALUE2(string_concat)
 MOBILE_VALUE2(index_get)
 MOBILE_VALUE2(array_append)
+MOBILE_VALUE2(array_get)
+MOBILE_VALUE1(byte_encode)
+MOBILE_VALUE1(utf8_encode_scalar)
+
+void abla_mobile_value_text_find_sequence(
+    AblaValue *out,
+    const AblaValue *text,
+    const AblaValue *sequence,
+    const AblaValue *begin,
+    const AblaValue *end
+) {
+    *out = abla_mobile_core_text_find_sequence(
+        *text, *sequence, *begin, *end
+    );
+}
+
+void abla_mobile_value_text_find_byte(
+    AblaValue *out,
+    const AblaValue *text,
+    const AblaValue *byte,
+    const AblaValue *begin,
+    const AblaValue *end
+) {
+    *out = abla_mobile_core_text_find_byte(*text, *byte, *begin, *end);
+}
+
+void abla_mobile_value_text_ascii_equal_insensitive(
+    AblaValue *out,
+    const AblaValue *left,
+    const AblaValue *right
+) {
+    *out = abla_mobile_core_text_ascii_equal_insensitive(*left, *right);
+}
+
+void abla_mobile_value_text_read_u32_little_endian(
+    AblaValue *out,
+    const AblaValue *text,
+    const AblaValue *offset
+) {
+    *out = abla_mobile_core_text_read_u32_little_endian(*text, *offset);
+}
+
+void abla_mobile_value_memory_promote_string(
+    AblaValue *out,
+    const AblaValue *value
+) {
+    if (value->tag != ABLA_STRING) {
+        abla_platform_panic("expected string", 15);
+    }
+    const char *source = abla_mobile_core_as_cstring(*value);
+    const size_t length = ABLA_STRING_LENGTH(value->as.string);
+    char *data = (char *)abla_platform_alloc(length + 1);
+    for (size_t index = 0; index < length; ++index) {
+        data[index] = source[index];
+    }
+    data[length] = '\0';
+    *out = abla_mobile_core_string_static(data, length);
+}
 
 void abla_mobile_value_string_slice(
     AblaValue *out,
@@ -141,6 +199,84 @@ void abla_mobile_value_array_set(
     const AblaValue *value
 ) {
     abla_mobile_core_array_set(*array, *index, *value);
+}
+
+int64_t abla_mobile_value_string_length_i64(const AblaValue *value) {
+    return abla_mobile_core_string_length_i64(*value);
+}
+
+int64_t abla_mobile_value_string_get_i64(
+    const AblaValue *value,
+    int64_t index
+) {
+    return abla_mobile_core_string_get_i64(*value, index);
+}
+
+bool abla_mobile_value_string_equal_bool(
+    const AblaValue *left,
+    const AblaValue *right
+) {
+    return abla_mobile_core_string_equal_bool(*left, *right);
+}
+
+bool abla_mobile_value_string_not_equal_bool(
+    const AblaValue *left,
+    const AblaValue *right
+) {
+    return abla_mobile_core_string_not_equal_bool(*left, *right);
+}
+
+int64_t abla_mobile_value_array_length_i64(const AblaValue *value) {
+    return abla_mobile_core_array_length_i64(*value);
+}
+
+int64_t abla_mobile_value_array_get_i64(
+    const AblaValue *value,
+    int64_t index
+) {
+    return abla_mobile_core_array_get_i64(*value, index);
+}
+
+void abla_mobile_value_field_get_indexed(
+    AblaValue *out,
+    const AblaValue *object,
+    uint32_t field_symbol,
+    size_t field_index
+) {
+    *out = abla_mobile_core_field_get_indexed(
+        *object, field_symbol, field_index
+    );
+}
+
+int64_t abla_mobile_value_field_get_indexed_i64(
+    const AblaValue *object,
+    uint32_t field_symbol,
+    size_t field_index
+) {
+    return abla_mobile_core_field_get_indexed_i64(
+        *object, field_symbol, field_index
+    );
+}
+
+bool abla_mobile_value_field_get_indexed_bool(
+    const AblaValue *object,
+    uint32_t field_symbol,
+    size_t field_index
+) {
+    return abla_mobile_core_field_get_indexed_bool(
+        *object, field_symbol, field_index
+    );
+}
+
+void abla_mobile_value_field_set_indexed(
+    const AblaValue *object,
+    uint32_t field_symbol,
+    size_t field_index,
+    const AblaValue *value
+) {
+    abla_mobile_core_field_set_indexed(
+        *object, field_symbol, field_index, *value
+    );
 }
 
 int64_t abla_mobile_value_as_i64(const AblaValue *value) {

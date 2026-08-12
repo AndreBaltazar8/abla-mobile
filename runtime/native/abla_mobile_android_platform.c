@@ -162,9 +162,18 @@ static bool mark_pointer(uintptr_t candidate) {
         if (payload < candidate) begin = middle + 1;
         else end = middle;
     }
-    if (begin >= collection_index_count ||
-        (uintptr_t)(collection_index[begin] + 1) != candidate) return false;
-    AblaAndroidAllocation* header = collection_index[begin];
+    AblaAndroidAllocation* header = NULL;
+    if (begin < collection_index_count &&
+        (uintptr_t)(collection_index[begin] + 1) == candidate) {
+        header = collection_index[begin];
+    } else if (begin != 0) {
+        AblaAndroidAllocation* containing = collection_index[begin - 1];
+        const uintptr_t payload = (uintptr_t)(containing + 1);
+        if (candidate - payload < containing->allocation.size) {
+            header = containing;
+        }
+    }
+    if (header == NULL) return false;
     if ((header->allocation.generation >> 63) != 0) return false;
     header->allocation.generation |= UINT64_C(1) << 63;
     if (mark_worklist_count >= collection_index_count) {
@@ -229,6 +238,7 @@ int64_t abla_platform_memory_collect(void* frames) {
     while (mark_worklist_count != 0) {
         const AblaAndroidAllocation* marked =
             mark_worklist[--mark_worklist_count];
+        (void)mark_pointer((uintptr_t)marked->allocation.cache_owner);
         if (marked->allocation.layout != 1 &&
             marked->allocation.layout != 10) {
             mark_words(marked + 1, marked->allocation.scan_size);
