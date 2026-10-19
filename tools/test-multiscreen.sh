@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The shared library leaves the host's entry points undefined for the process
+# that loads it to provide, which a Linux .so may do and a macOS dylib link
+# rejects.
+if [[ $(uname -s) == Darwin ]]; then
+    echo "test-multiscreen skipped: its shared library needs Linux-style undefined host symbols" >&2
+    exit 0
+fi
+
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 compiler=${ABLAC:-$project_root/../ablac/build/ablac}
 native_compiler=${CC:-cc}
