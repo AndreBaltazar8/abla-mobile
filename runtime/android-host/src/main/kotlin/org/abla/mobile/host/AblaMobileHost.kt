@@ -267,10 +267,11 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
 }
 
 @Composable
-private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier) {
+internal fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier) {
     key(node.key) {
         val tagged = modifier.testTag(node.key)
-        when (node.type) {
+        if (node.type.startsWith("one.")) RenderOne(tree, node, tagged)
+        else when (node.type) {
             "input" -> RenderInput(tree,node,tagged)
             "appScaffold" -> RenderAppScaffold(tree,node,tagged)
             "theme" -> {
@@ -552,7 +553,7 @@ private fun RenderText(node: UiNode, modifier: Modifier) {
 }
 
 @Composable
-private fun RenderImage(node: UiNode, modifier: Modifier) {
+internal fun RenderImage(node: UiNode, modifier: Modifier) {
     val context = LocalContext.current
     val source = node.text("source")
     val authorization = node.text("authorization")

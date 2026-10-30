@@ -183,3 +183,24 @@ outside existing byte ranges.
 
 A later binary representation may replace JSON only with a new negotiated
 protocol version and equivalent validation/ownership limits.
+
+## General requests and files (Abla One services)
+
+Request bodies are heap-allocated in the native queue (up to 8 MB) and copied
+to the host in one call with `abla_mobile_platform_request_body_copy`; the
+bridge falls back to the per-byte accessor for libraries built before it.
+
+- `SEND`: url is the target URL; the body is a JSON envelope with
+  `method`, `headers`, `timeoutMs`, `binary`, `saveToFile`, and one body:
+  `body` (text), `bodyBase64`, `bodyFile` (a file handle, streamed) or
+  `multipart` (`[{name, value | base64 | file, filename, contentType}]`).
+  The completion adds `headers` and either `body`, `bodyBase64` or `file`.
+- `PICKFILE`: url is `{"mime": [...], "multiple": bool}`; completes with a
+  JSON array of `{handle, name, size, mime}`.
+- `FILEREAD`: url is a handle, body `{"offset", "length"}` (at most 256 KB);
+  completes with `bodyBase64`.
+- `FILEDEL`: url is a handle.
+
+File handles are opaque and last for the process. Picked documents are read
+through the content resolver and never deleted; saved responses live in the
+cache directory and are deleted with `FILEDEL`.

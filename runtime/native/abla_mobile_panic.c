@@ -49,3 +49,20 @@ _Noreturn void abla_mobile_raise_panic(const char *message, size_t length) {
     if (panic_target_active) longjmp(panic_target, 1);
     abort();
 }
+
+// Self-hosted runtimes (abla_mobile_hosted.c) report a panic by writing to
+// standard error and then exiting. Collect what they write while a checked run
+// is active, then turn the exit into the same failure return.
+void abla_mobile_capture_failure(const char *message, size_t length) {
+    if (!panic_target_active || message == NULL) return;
+    size_t room = ABLA_MOBILE_FAILURE_LIMIT - panic_message_size;
+    size_t size = length < room ? length : room;
+    if (size > 0) memcpy(panic_message + panic_message_size, message, size);
+    panic_message_size += size;
+}
+
+_Noreturn void abla_mobile_exit_failure(int status) {
+    if (panic_target_active) longjmp(panic_target, 1);
+    (void)status;
+    abort();
+}

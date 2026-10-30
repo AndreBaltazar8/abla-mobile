@@ -16,6 +16,7 @@ ABLA_MOBILE_1 {
         abla_mobile_platform_request_url_byte;
         abla_mobile_platform_request_body_size;
         abla_mobile_platform_request_body_byte;
+        abla_mobile_platform_request_body_copy;
         abla_mobile_platform_request_pop;
     local:
         *;

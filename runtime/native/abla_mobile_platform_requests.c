@@ -1,12 +1,14 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define ABLA_MOBILE_REQUEST_LIMIT 32U
 #define ABLA_MOBILE_REQUEST_METHOD_LIMIT 8U
 #define ABLA_MOBILE_REQUEST_URL_LIMIT 2048U
-#define ABLA_MOBILE_REQUEST_BODY_LIMIT 16384U
+/* Bodies are heap-allocated per request (large uploads, JSON envelopes). */
+#define ABLA_MOBILE_REQUEST_BODY_LIMIT (8U * 1024U * 1024U)
 #define ABLA_MOBILE_EXPORT __attribute__((visibility("default")))
 
 typedef struct AblaMobilePlatformRequest {
@@ -16,7 +18,7 @@ typedef struct AblaMobilePlatformRequest {
     size_t body_size;
     unsigned char method[ABLA_MOBILE_REQUEST_METHOD_LIMIT];
     unsigned char url[ABLA_MOBILE_REQUEST_URL_LIMIT];
-    unsigned char body[ABLA_MOBILE_REQUEST_BODY_LIMIT];
+    unsigned char *body;
 } AblaMobilePlatformRequest;
 
 static AblaMobilePlatformRequest requests[ABLA_MOBILE_REQUEST_LIMIT];
@@ -45,6 +47,12 @@ ABLA_MOBILE_EXPORT int64_t abla_mobile_http_request(
         url_size == 0 || url_size > ABLA_MOBILE_REQUEST_URL_LIMIT ||
         body_size > ABLA_MOBILE_REQUEST_BODY_LIMIT) return 0;
 
+    unsigned char *copy = NULL;
+    if (body_size > 0) {
+        copy = (unsigned char *)malloc(body_size);
+        if (copy == NULL) return 0;
+        memcpy(copy, body, body_size);
+    }
     const size_t tail = (request_head + request_size) %
         ABLA_MOBILE_REQUEST_LIMIT;
     AblaMobilePlatformRequest *request = &requests[tail];
@@ -57,7 +65,7 @@ ABLA_MOBILE_EXPORT int64_t abla_mobile_http_request(
     request->body_size = body_size;
     memcpy(request->method, method, method_size);
     memcpy(request->url, url, url_size);
-    if (body_size > 0) memcpy(request->body, body, body_size);
+    request->body = copy;
     request_size += 1U;
     return request->identifier;
 }
@@ -102,8 +110,23 @@ ABLA_MOBILE_EXPORT int64_t abla_mobile_platform_request_body_byte(
     return requests[request_head].body[index];
 }
 
+// Copies the whole body of the next request in one call; returns its size, or
+// -1 if `capacity` is too small.
+ABLA_MOBILE_EXPORT int64_t abla_mobile_platform_request_body_copy(
+    unsigned char *out,
+    int64_t capacity
+) {
+    if (request_size == 0) return 0;
+    const AblaMobilePlatformRequest *request = &requests[request_head];
+    if (out == NULL || capacity < 0 || (uint64_t)capacity < request->body_size) return -1;
+    if (request->body_size > 0) memcpy(out, request->body, request->body_size);
+    return (int64_t)request->body_size;
+}
+
 ABLA_MOBILE_EXPORT void abla_mobile_platform_request_pop(void) {
     if (request_size == 0) return;
+    free(requests[request_head].body);
+    requests[request_head].body = NULL;
     request_head = (request_head + 1U) % ABLA_MOBILE_REQUEST_LIMIT;
     request_size -= 1U;
 }

@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit
 
 internal object NativeBridge {
     @Volatile private var pendingImageRequest = 0L
+    @Volatile private var pendingFileRequest = 0L
     private const val HTTP_COMPLETION_EVENT = -2L
     private const val HTTP_COMPLETION_LIMIT = 512 * 1024
     // Generic app responses can contain bounded server-owned histories and
@@ -211,8 +212,9 @@ internal object NativeBridge {
             method == "VOICEUP" ||
             method == "ASSIST" || method == "TIMER" || method == "PICKIMG" || method == "PICKEMJ" || method == "IMGCLEAR"
         if (requestId <= 0L ||
-            (method != "GET" && method != "POST" && !secureMethod && !voiceMethod) ||
-            urlBytes.size > 2048 || bodyBytes.size > 16384
+            (method != "GET" && method != "POST" && method != "SEND" && method != "PICKFILE" &&
+                method != "FILEREAD" && method != "FILEDEL" && !secureMethod && !voiceMethod) ||
+            urlBytes.size > 2048 || bodyBytes.size > (if (method == "SEND") 8 * 1024 * 1024 else 16384)
         ) {
             completeHttp(requestId, 0, "", "invalid HTTP request")
             return
@@ -228,6 +230,14 @@ internal object NativeBridge {
                 "IMGCLEAR" -> { RemoteImageCache.clear();completeHttp(requestId,204,"","") }
                 else -> scheduleTimer(requestId, url)
             }
+            return
+        }
+        if (method == "SEND") {
+            sendRequest(requestId, url, bodyBytes)
+            return
+        }
+        if (method == "PICKFILE" || method == "FILEREAD" || method == "FILEDEL") {
+            fileRequest(requestId, method, url, bodyBytes)
             return
         }
         if (secureMethod) {
@@ -621,11 +631,187 @@ internal object NativeBridge {
         player?.release()
     }
 
+    // A general HTTP request (Abla One's OneRequest). `envelope` is JSON:
+    //   method, headers {name: value}, timeoutMs, binary,
+    //   one body: "body" (text), "bodyBase64" (bytes), "bodyFile" (a file
+    //   handle, streamed) or "multipart" [{name, value | base64 | file,
+    //   filename, contentType}],
+    //   saveToFile: write the response to a new file and return its handle.
+    // The completion adds "headers" and either "body", "bodyBase64" (binary)
+    // or "file" {handle, name, size, mime}. Redirects are not followed.
+    private fun sendRequest(requestId: Long, url: String, envelope: ByteArray) {
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "requests are unavailable")
+        val spec = try { JSONObject(envelope.toString(Charsets.UTF_8)) } catch (_: JSONException) {
+            return completeHttp(requestId, 0, "", "invalid request envelope")
+        }
+        val method = spec.optString("method", "GET").uppercase()
+        if (method !in setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")) {
+            return completeHttp(requestId, 0, "", "unsupported method")
+        }
+        val uri = try { URI(url) } catch (_: Exception) { return completeHttp(requestId, 0, "", "invalid URL") }
+        if (uri.scheme != "https" && uri.scheme != "http") return completeHttp(requestId, 0, "", "only http and https are allowed")
+        val inline = try {
+            if (spec.has("bodyBase64")) android.util.Base64.decode(spec.getString("bodyBase64"), android.util.Base64.DEFAULT)
+            else spec.optString("body", "").toByteArray(Charsets.UTF_8)
+        } catch (_: IllegalArgumentException) { return completeHttp(requestId, 0, "", "invalid base64 body") }
+        val bodyFile = spec.optString("bodyFile", "")
+        if (bodyFile.isNotEmpty() && !HostFiles.exists(bodyFile)) return completeHttp(requestId, 0, "", "unknown file handle")
+        val parts = spec.optJSONArray("multipart")
+        val timeout = spec.optInt("timeoutMs", 15_000).coerceIn(1_000, 600_000)
+        val binary = spec.optBoolean("binary", false)
+        val saveToFile = spec.optBoolean("saveToFile", false)
+        val headers = spec.optJSONObject("headers") ?: JSONObject()
+        try {
+            requestExecutor.execute {
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.requestMethod = method
+                    connection.connectTimeout = timeout
+                    connection.readTimeout = timeout
+                    connection.instanceFollowRedirects = false
+                    headers.keys().forEach { name -> connection.setRequestProperty(name, headers.optString(name)) }
+                    if (parts != null) {
+                        val boundary = "abla-" + java.util.UUID.randomUUID().toString()
+                        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                        connection.doOutput = true
+                        connection.setChunkedStreamingMode(64 * 1024)
+                        connection.outputStream.use { out -> writeMultipart(context, out, boundary, parts) }
+                    } else if (bodyFile.isNotEmpty()) {
+                        connection.doOutput = true
+                        val size = HostFiles.size(bodyFile)
+                        if (size >= 0) connection.setFixedLengthStreamingMode(size) else connection.setChunkedStreamingMode(64 * 1024)
+                        if (!headers.keys().asSequence().any { it.equals("Content-Type", true) }) {
+                            connection.setRequestProperty("Content-Type", HostFiles.mime(bodyFile))
+                        }
+                        connection.outputStream.use { out -> HostFiles.open(context, bodyFile)?.use { it.copyTo(out) } }
+                    } else if (inline.isNotEmpty() || method == "POST" || method == "PUT" || method == "PATCH") {
+                        connection.doOutput = true
+                        connection.setFixedLengthStreamingMode(inline.size)
+                        connection.outputStream.use { it.write(inline) }
+                    }
+                    val status = connection.responseCode
+                    val responseHeaders = JSONObject()
+                    connection.headerFields.forEach { (name, values) ->
+                        if (name != null && values != null) responseHeaders.put(name.lowercase(), values.joinToString(", "))
+                    }
+                    val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                    if (saveToFile && status in 200..299) {
+                        val target = HostFiles.cacheFile(context)
+                        stream?.use { input -> target.outputStream().use { input.copyTo(it) } }
+                        val name = URI(url).path.substringAfterLast('/').ifEmpty { "download" }
+                        val mime = connection.contentType?.substringBefore(';')?.trim() ?: "application/octet-stream"
+                        completeHttp(requestId, status, "", "", responseHeaders, file = HostFiles.registerSaved(target, name, mime))
+                        return@execute
+                    }
+                    val response = stream?.use { it.readLimited(HTTP_RESPONSE_LIMIT) } ?: ByteArray(0)
+                    if (response.size > HTTP_RESPONSE_LIMIT) completeHttp(requestId, status, "", "response is too large; use saveToFile", responseHeaders)
+                    else if (binary) completeHttp(requestId, status, "", "", responseHeaders, android.util.Base64.encodeToString(response, android.util.Base64.NO_WRAP))
+                    else completeHttp(requestId, status, response.toString(Charsets.UTF_8), "", responseHeaders)
+                } catch (failure: Exception) {
+                    completeHttp(requestId, 0, "", failure.message ?: failure.javaClass.simpleName)
+                } finally {
+                    connection?.disconnect()
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            completeHttp(requestId, 0, "", "HTTP worker queue is full")
+        }
+    }
+
+    private fun writeMultipart(context: Context, out: java.io.OutputStream, boundary: String, parts: org.json.JSONArray) {
+        fun line(text: String) = out.write((text + "\r\n").toByteArray(Charsets.UTF_8))
+        for (index in 0 until parts.length()) {
+            val part = parts.getJSONObject(index)
+            val name = part.optString("name").replace("\"", "")
+            val file = part.optString("file", "")
+            val filename = part.optString("filename", if (file.isNotEmpty()) HostFiles.name(file) else "").replace("\"", "")
+            line("--$boundary")
+            line("Content-Disposition: form-data; name=\"$name\"" + (if (filename.isNotEmpty()) "; filename=\"$filename\"" else ""))
+            val type = part.optString("contentType", if (file.isNotEmpty()) HostFiles.mime(file) else "")
+            if (type.isNotEmpty()) line("Content-Type: $type")
+            line("")
+            when {
+                file.isNotEmpty() -> HostFiles.open(context, file)?.use { it.copyTo(out) } ?: throw IllegalArgumentException("unknown file handle")
+                part.has("base64") -> out.write(android.util.Base64.decode(part.getString("base64"), android.util.Base64.DEFAULT))
+                else -> out.write(part.optString("value").toByteArray(Charsets.UTF_8))
+            }
+            line("")
+        }
+        line("--$boundary--")
+    }
+
+    // PICKFILE: url is JSON {"mime": [types], "multiple": bool}; completes with
+    // a JSON array of {handle, name, size, mime} (an empty array if cancelled).
+    // FILEREAD: url is a handle, body is {"offset", "length"} (length at most
+    // 256 KB); completes with bodyBase64. FILEDEL: url is a handle.
+    private fun fileRequest(requestId: Long, method: String, url: String, body: ByteArray) {
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "files are unavailable")
+        when (method) {
+            "PICKFILE" -> {
+                val owner = activity?.get() ?: return completeHttp(requestId, 0, "", "picker unavailable")
+                if (pendingFileRequest != 0L) return completeHttp(requestId, 409, "", "picker already open")
+                val options = try { JSONObject(url) } catch (_: JSONException) { JSONObject() }
+                val types = options.optJSONArray("mime")
+                val mimes = if (types == null || types.length() == 0) arrayOf("*/*") else Array(types.length()) { types.getString(it) }
+                pendingFileRequest = requestId
+                owner.runOnUiThread {
+                    try {
+                        owner.startActivityForResult(
+                            Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                                .setType(if (mimes.size == 1) mimes[0] else "*/*")
+                                .putExtra(Intent.EXTRA_MIME_TYPES, mimes)
+                                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, options.optBoolean("multiple", false)),
+                            AblaMobileActivity.FILE_PICK_REQUEST,
+                        )
+                    } catch (_: Exception) {
+                        pendingFileRequest = 0L
+                        completeHttp(requestId, 0, "", "picker unavailable")
+                    }
+                }
+            }
+            "FILEREAD" -> {
+                val range = try { JSONObject(body.toString(Charsets.UTF_8)) } catch (_: JSONException) { JSONObject() }
+                val length = range.optInt("length", 256 * 1024).coerceIn(0, 256 * 1024)
+                try {
+                    requestExecutor.execute {
+                        try {
+                            val bytes = HostFiles.read(context, url, range.optLong("offset", 0L).coerceAtLeast(0L), length)
+                            if (bytes == null) completeHttp(requestId, 404, "", "unknown file handle")
+                            else completeHttp(requestId, 200, "", "", bodyBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+                        } catch (failure: Exception) {
+                            completeHttp(requestId, 0, "", failure.message ?: failure.javaClass.simpleName)
+                        }
+                    }
+                } catch (_: RejectedExecutionException) {
+                    completeHttp(requestId, 0, "", "platform worker queue is full")
+                }
+            }
+            else -> completeHttp(requestId, if (HostFiles.delete(url)) 204 else 404, "", "")
+        }
+    }
+
+    fun onFilesPicked(data: Intent?) {
+        val requestId = pendingFileRequest
+        pendingFileRequest = 0L
+        if (requestId == 0L) return
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "picker unavailable")
+        val uris = mutableListOf<Uri>()
+        data?.clipData?.let { clip -> for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) }
+        if (uris.isEmpty()) data?.data?.let { uris.add(it) }
+        val picked = org.json.JSONArray()
+        for (uri in uris) picked.put(HostFiles.registerPicked(context, uri))
+        completeHttp(requestId, 200, picked.toString(), "")
+    }
+
     private fun completeHttp(
         requestId: Long,
         status: Int,
         body: String,
         error: String,
+        headers: JSONObject? = null,
+        bodyBase64: String? = null,
+        file: JSONObject? = null,
     ) {
         val completion = try {
             JSONObject()
@@ -633,6 +819,9 @@ internal object NativeBridge {
                 .put("status", status)
                 .put("body", body)
                 .put("error", error.take(512))
+                .apply { if (headers != null) put("headers", headers) }
+                .apply { if (bodyBase64 != null) put("bodyBase64", bodyBase64) }
+                .apply { if (file != null) put("file", file) }
                 .toString()
                 .toByteArray(Charsets.UTF_8)
         } catch (_: JSONException) {
@@ -806,6 +995,11 @@ internal data class UiNode(
             "nativeGame",
             "pulseBadge",
         )
+        // Abla One nodes (abla-one/SPEC.md §6), rendered by OneRenderer.kt.
+        private val oneTypes = setOf(
+            "one.column", "one.row", "one.stack", "one.scroll", "one.feed", "one.text", "one.rich",
+            "one.icon", "one.image", "one.pressable", "one.input", "one.spacer", "one.divider", "one.native",
+        )
 
         fun fromJson(
             source: JSONObject,
@@ -816,12 +1010,12 @@ internal data class UiNode(
             require(budget.remainingNodes-- > 0) { "tree exceeds 4096 nodes" }
             val type = source.getString("type")
             val key = source.getString("key")
-            require(type in supportedTypes) { "unsupported node type: $type" }
+            require(type in supportedTypes || type in oneTypes) { "unsupported node type: $type" }
             require(key.isNotEmpty() && key.length <= 128) {
                 "node key must contain 1..128 characters"
             }
             val properties = source.getJSONObject("properties")
-            require(properties.length() <= 32) { "node has too many properties" }
+            require(properties.length() <= if (type in oneTypes) 128 else 32) { "node has too many properties" }
             properties.keys().forEach { name ->
                 require(name.length <= 64) { "property name is too long" }
                 val value = properties.get(name)

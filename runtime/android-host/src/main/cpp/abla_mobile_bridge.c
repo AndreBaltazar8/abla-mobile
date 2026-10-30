@@ -14,7 +14,7 @@
 #define ABLA_PAYLOAD_LIMIT (512U * 1024U)
 #define ABLA_REQUEST_METHOD_LIMIT 8U
 #define ABLA_REQUEST_URL_LIMIT 2048U
-#define ABLA_REQUEST_BODY_LIMIT 16384U
+#define ABLA_REQUEST_BODY_LIMIT (8U * 1024U * 1024U)
 
 #define ABLA_TREE_BEGIN 1
 #define ABLA_TREE_END 2
@@ -71,7 +71,8 @@ typedef struct AblaMobileBridge {
     AblaEffectPop effect_pop;
     uint8_t request_method_bytes[ABLA_REQUEST_METHOD_LIMIT];
     uint8_t request_url[ABLA_REQUEST_URL_LIMIT];
-    uint8_t request_body[ABLA_REQUEST_BODY_LIMIT];
+    uint8_t *request_body;
+    size_t request_body_capacity;
     AblaRequestNext request_next_id;
     AblaRequestNext request_method_size;
     AblaRequestByte request_method_byte;
@@ -79,6 +80,7 @@ typedef struct AblaMobileBridge {
     AblaRequestByte request_url_byte;
     AblaRequestNext request_body_size;
     AblaRequestByte request_body_byte;
+    int64_t (*request_body_copy)(uint8_t *, int64_t);
     AblaRequestPop request_pop;
     bool started;
     bool accepting_events;
@@ -330,6 +332,31 @@ static void abla_publish_request(
     abla_finish_jni_call(environment, attached);
 }
 
+// Request bodies can be large, so the buffer grows on demand and the whole
+// body is copied in one call when the library provides it (older application
+// libraries only expose the per-byte accessor).
+static bool abla_copy_platform_request_body(int64_t size) {
+    if (size < 0 || (uint64_t)size > ABLA_REQUEST_BODY_LIMIT) return false;
+    if ((size_t)size > abla_bridge.request_body_capacity) {
+        size_t capacity = abla_bridge.request_body_capacity == 0 ? 16384U : abla_bridge.request_body_capacity;
+        while (capacity < (size_t)size) capacity *= 2U;
+        uint8_t *grown = (uint8_t *)realloc(abla_bridge.request_body, capacity);
+        if (grown == NULL) return false;
+        abla_bridge.request_body = grown;
+        abla_bridge.request_body_capacity = capacity;
+    }
+    if (size == 0) return true;
+    if (abla_bridge.request_body_copy != NULL) {
+        return abla_bridge.request_body_copy(abla_bridge.request_body, (int64_t)abla_bridge.request_body_capacity) == size;
+    }
+    return abla_copy_platform_request_field(
+        abla_bridge.request_body,
+        size,
+        ABLA_REQUEST_BODY_LIMIT,
+        abla_bridge.request_body_byte
+    );
+}
+
 static void abla_drain_platform_requests(void) {
     if (abla_bridge.request_next_id == NULL) return;
     int64_t identifier = abla_bridge.request_next_id();
@@ -350,12 +377,7 @@ static void abla_drain_platform_requests(void) {
                 ABLA_REQUEST_URL_LIMIT,
                 abla_bridge.request_url_byte
             ) &&
-            abla_copy_platform_request_field(
-                abla_bridge.request_body,
-                body_size,
-                ABLA_REQUEST_BODY_LIMIT,
-                abla_bridge.request_body_byte
-            );
+            abla_copy_platform_request_body(body_size);
         abla_bridge.request_pop();
         if (!valid) {
             abla_publish_failure(
@@ -508,6 +530,9 @@ static void *abla_mobile_thread(void *unused) {
     );
     abla_bridge.request_pop = (AblaRequestPop)dlsym(
         library, "abla_mobile_platform_request_pop"
+    );
+    abla_bridge.request_body_copy = (int64_t (*)(uint8_t *, int64_t))dlsym(
+        library, "abla_mobile_platform_request_body_copy"
     );
     if (abla_bridge.effect_next_kind == NULL ||
         abla_bridge.effect_next_size == NULL ||

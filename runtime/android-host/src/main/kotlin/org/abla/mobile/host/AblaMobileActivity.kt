@@ -19,6 +19,7 @@ open class AblaMobileActivity : ComponentActivity() {
         const val RECORD_AUDIO_REQUEST = 4701
         const val ASSISTANT_ROLE_REQUEST = 4702
         const val IMAGE_PICK_REQUEST = 4703
+        const val FILE_PICK_REQUEST = 4704
         private const val ASSISTANT_EVENT = 2_147_483_647L
     }
 
@@ -141,6 +142,10 @@ open class AblaMobileActivity : ComponentActivity() {
     @Deprecated("Android activity result compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == FILE_PICK_REQUEST) {
+            NativeBridge.onFilesPicked(if (resultCode == RESULT_OK) data else null)
+            return
+        }
         if (requestCode == IMAGE_PICK_REQUEST) {
             NativeBridge.onImagePicked(if (resultCode == Activity.RESULT_OK) data?.data else null)
         }
