@@ -71,6 +71,20 @@ fun mobileStyledColumn(
     mobileFlattenChildren(children)
 )
 
+// Keeps one content viewport above a bottom bar. The content can scroll
+// independently while the bar remains visible at the bottom of the screen.
+fun mobileBottomScaffold(
+    key: string,
+    background: string,
+    content: MobileNode,
+    bottomBar: MobileNode
+): MobileNode = MobileNode(
+    "bottomScaffold",
+    key,
+    mobileProperties(["background"], [jsonString(background)]),
+    [content, bottomBar]
+)
+
 fun mobileRow(
     key: string,
     spacing: int,
@@ -313,6 +327,24 @@ fun mobileTextField(
         ["label", "value", "event", "secure"],
         [jsonString(label), jsonString(value), jsonInteger(event),
          jsonBoolean(secure)]
+    ),
+    []
+)
+
+fun mobileDropdown(
+    key: string,
+    label: string,
+    options: string,
+    value: string,
+    event: int,
+    enabled: bool = true
+): MobileNode = MobileNode(
+    "dropdown",
+    key,
+    mobileProperties(
+        ["label", "options", "value", "event", "enabled"],
+        [jsonString(label), jsonString(options), jsonString(value),
+         jsonInteger(event), jsonBoolean(enabled)]
     ),
     []
 )

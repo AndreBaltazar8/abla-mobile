@@ -7,6 +7,7 @@ fun mobileTemplateApplication(): int {
     var enabled = true
     var checked = false
     var volume = 25
+    var repository = "coder-auto"
     var selected = false
     var showDetails = true
     var status = "Waiting"
@@ -58,6 +59,13 @@ fun mobileTemplateApplication(): int {
                         maximum={100}
                     />
                     <Progress key="busy" value={1} maximum={1} circular />
+                    <Dropdown
+                        key="repository"
+                        label="Repository"
+                        options="coder-auto|ablac|abla-mobile"
+                        value={repository}
+                        onChange={repository = value}
+                    />
                 </Card>
                 <Divider key="divider" />
                 <Text key="status" style="label">{status}</Text>

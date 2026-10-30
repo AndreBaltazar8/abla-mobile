@@ -203,6 +203,8 @@ compile fun mobileTemplateAllowsAttribute(tag: string, name: string): bool {
         name == "onTap" || name == "text"
     if (tag == "TextField") return name == "label" || name == "value" ||
         name == "secure" || name == "onChange"
+    if (tag == "Dropdown") return name == "label" || name == "options" ||
+        name == "value" || name == "enabled" || name == "onChange"
     if (tag == "Switch" || tag == "Checkbox") return name == "label" ||
         name == "checked" || name == "onChange"
     if (tag == "Slider") return name == "label" || name == "value" ||
@@ -230,7 +232,7 @@ compile fun mobileTemplateKnownTag(tag: string): bool =
     tag == "Slider" || tag == "Progress" || tag == "Divider" ||
     tag == "Spacer" || tag == "Image" || tag == "MediaCard" ||
     tag == "ActionGrid" || tag == "WebView" || tag == "NativeGame" ||
-    tag == "PulseBadge"
+    tag == "PulseBadge" || tag == "Dropdown"
 
 compile fun mobileTemplateIsActionAttribute(name: string): bool =
     name == "onTap" || name == "onChange" || name == "onHttp" ||
@@ -646,6 +648,16 @@ compile fun mobileTemplateParseNode(
             cursor, names, values, braced, "onChange", actionIds, actions
         ),
         mobileTemplateAttribute(names, values, "secure", syntaxBoolean(false))
+    ])
+    if (tag == "Dropdown") result = mobileTemplateCall("mobileDropdown", [
+        key,
+        mobileTemplateAttribute(names, values, "label", syntaxString("")),
+        mobileTemplateAttribute(names, values, "options", syntaxString("")),
+        mobileTemplateAttribute(names, values, "value", syntaxString("")),
+        mobileTemplateAction(
+            cursor, names, values, braced, "onChange", actionIds, actions
+        ),
+        mobileTemplateAttribute(names, values, "enabled", syntaxBoolean(true))
     ])
     if (tag == "Switch") result = mobileTemplateCall("mobileSwitch", [
         key,

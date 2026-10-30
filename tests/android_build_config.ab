@@ -36,6 +36,15 @@ val androidConfigurationWritten = #mobileWriteAndroidPackage(
                 "",
                 "image/*",
                 false
+            ),
+            MobileAndroidIntentFilter(
+                ["android.intent.action.ASSIST"],
+                ["android.intent.category.DEFAULT"],
+                "",
+                "",
+                "",
+                "",
+                false
             )
         ],
         true,

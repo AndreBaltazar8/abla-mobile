@@ -32,8 +32,9 @@ static const TemplateEvent template_events[] = {
     {3, "false"},
     {4, "true"},
     {5, "80"},
-    {6, "selection"},
-    {7, ""},
+    {6, "abla-mobile"},
+    {7, "selection"},
+    {8, ""},
     {0, ""},
 };
 
@@ -90,7 +91,7 @@ int main(void) {
     }
 
     const int64_t result = abla_mobile_run();
-    const int valid = result == 0 && host.published == 8 &&
+    const int valid = result == 0 && host.published == 9 &&
         contains(&host, "\"title\":\"Template Ada Lovelace\"") &&
         contains(&host, "\"darkTheme\":true") &&
         contains(&host, "\"text\":\"Hello Ada Lovelace\"") &&
@@ -100,6 +101,9 @@ int main(void) {
         contains(&host, "\"checked\":false") &&
         contains(&host, "\"checked\":true") &&
         contains(&host, "\"value\":80") &&
+        contains(&host, "\"type\":\"dropdown\"") &&
+        contains(&host, "\"options\":\"coder-auto|ablac|abla-mobile\"") &&
+        contains(&host, "\"value\":\"abla-mobile\"") &&
         contains(&host, "\"selected\":true") &&
         contains(&host, "Selected state is visible") &&
         contains(&host, "Dynamic child group") &&

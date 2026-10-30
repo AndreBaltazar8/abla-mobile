@@ -6,6 +6,10 @@ fun renderUiTree(): string {
         mobileText("title", "Abla Mobile", "headline"),
         mobileButton("increment", "Increment", 1, true, "filled"),
         mobileTextField("name", "Name", "Abla", 2),
+        mobileDropdown(
+            "repository", "Repository", "coder-auto|ablac|abla-mobile",
+            "coder-auto", 5
+        ),
         mobileSwitch("theme", "Dark theme", true, 3),
         mobileSlider("volume", "Volume", 65, 0, 100, 4),
         mobileProgress("progress", 65, 100, false),

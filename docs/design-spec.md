@@ -133,7 +133,8 @@ programmatic view functions.
 
 - `mobileColumn`, `mobileRow`, `mobileSpacer`, and `mobileDivider`;
 - `mobileText`, `mobileCard`, and `mobileList`;
-- `mobileButton`, `mobileTextField`, `mobileSwitch`, and `mobileCheckbox`;
+- `mobileButton`, `mobileTextField`, `mobileDropdown`, `mobileSwitch`, and
+  `mobileCheckbox`;
 - `mobileSlider`, `mobileProgress`, and `mobileChip`; and
 - `mobileEncodeTree`.
 

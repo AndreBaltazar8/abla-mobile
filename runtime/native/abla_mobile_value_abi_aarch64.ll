@@ -47,6 +47,7 @@ declare void @abla_mobile_value_text_find_sequence(ptr, ptr, ptr, ptr, ptr)
 declare void @abla_mobile_value_text_find_byte(ptr, ptr, ptr, ptr, ptr)
 declare void @abla_mobile_value_text_ascii_equal_insensitive(ptr, ptr, ptr)
 declare void @abla_mobile_value_text_read_u32_little_endian(ptr, ptr, ptr)
+declare void @abla_mobile_value_text_is_valid_utf8(ptr, ptr)
 declare void @abla_mobile_value_memory_promote_string(ptr, ptr)
 declare void @abla_mobile_value_string_slice(ptr, ptr, ptr, ptr)
 declare void @abla_mobile_value_i64(ptr, i64)
@@ -274,6 +275,11 @@ define void @ablaTextAsciiEqualInsensitive(ptr sret(%AblaValue) %out, ptr byval(
 
 define void @ablaTextReadU32LittleEndian(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %text, ptr byval(%AblaValue) %offset) {
   call void @abla_mobile_value_text_read_u32_little_endian(ptr %out, ptr %text, ptr %offset)
+  ret void
+}
+
+define void @ablaTextIsValidUtf8(ptr sret(%AblaValue) %out, ptr byval(%AblaValue) %text) {
+  call void @abla_mobile_value_text_is_valid_utf8(ptr %out, ptr %text)
   ret void
 }
 

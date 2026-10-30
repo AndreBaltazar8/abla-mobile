@@ -214,6 +214,56 @@ compile fun mobileAndroidValidIntentFilter(
     valid
 }
 
+compile fun mobileAndroidIntentFilterHasAction(
+    filter: MobileAndroidIntentFilter,
+    name: string
+): bool {
+    var found = false
+    var index = 0
+    while (!found && index < filter.actions.size) {
+        if (filter.actions[index] == name) found = true
+        index = index + 1
+    }
+    found
+}
+
+compile fun mobileAndroidAssistantIntentFilter(
+    filter: MobileAndroidIntentFilter
+): bool = mobileAndroidIntentFilterHasAction(
+    filter,
+    "android.intent.action.ASSIST"
+) || mobileAndroidIntentFilterHasAction(
+    filter,
+    "android.intent.action.VOICE_COMMAND"
+)
+
+compile fun mobileAndroidIntentFilterXml(
+    filter: MobileAndroidIntentFilter
+): string {
+    var manifest = "            <intent-filter"
+    if (filter.autoVerify) manifest = "$manifest android:autoVerify=\"true\""
+    manifest = "$manifest>\n"
+    var action = 0
+    while (action < filter.actions.size) {
+        manifest = "$manifest                <action android:name=\"${mobileAndroidXml(filter.actions[action])}\" />\n"
+        action = action + 1
+    }
+    var category = 0
+    while (category < filter.categories.size) {
+        manifest = "$manifest                <category android:name=\"${mobileAndroidXml(filter.categories[category])}\" />\n"
+        category = category + 1
+    }
+    if (filter.scheme != "" || filter.mimeType != "") {
+        manifest = "$manifest                <data"
+        if (filter.scheme != "") manifest = "$manifest android:scheme=\"${mobileAndroidXml(filter.scheme)}\""
+        if (filter.host != "") manifest = "$manifest android:host=\"${mobileAndroidXml(filter.host)}\""
+        if (filter.pathPrefix != "") manifest = "$manifest android:pathPrefix=\"${mobileAndroidXml(filter.pathPrefix)}\""
+        if (filter.mimeType != "") manifest = "$manifest android:mimeType=\"${mobileAndroidXml(filter.mimeType)}\""
+        manifest = "$manifest />\n"
+    }
+    "$manifest            </intent-filter>\n"
+}
+
 compile fun mobileAndroidManifest(
     configuration: MobileAndroidConfiguration
 ): string {
@@ -238,40 +288,48 @@ compile fun mobileAndroidManifest(
 
     if (configuration.intentFilters.size == 0) return "$manifest />\n</manifest>\n"
 
-    manifest = "$manifest>\n        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileActivity\"\n            android:exported=\"true\">\n"
+    manifest = "$manifest>\n"
+    var regularFilters = 0
+    var assistantFilters = 0
     var filterIndex = 0
     while (filterIndex < configuration.intentFilters.size) {
         val filter = configuration.intentFilters[filterIndex]
-        manifest = "$manifest            <intent-filter"
-        if (filter.autoVerify) manifest = "$manifest android:autoVerify=\"true\""
-        manifest = "$manifest>\n"
-        var action = 0
-        while (action < filter.actions.size) {
-            manifest = "$manifest                <action android:name=\"${mobileAndroidXml(filter.actions[action])}\" />\n"
-            action = action + 1
-        }
-        var category = 0
-        while (category < filter.categories.size) {
-            manifest = "$manifest                <category android:name=\"${mobileAndroidXml(filter.categories[category])}\" />\n"
-            category = category + 1
-        }
-        if (filter.scheme != "" || filter.mimeType != "") {
-            manifest = "$manifest                <data"
-            if (filter.scheme != "") manifest = "$manifest android:scheme=\"${mobileAndroidXml(filter.scheme)}\""
-            if (filter.host != "") manifest = "$manifest android:host=\"${mobileAndroidXml(filter.host)}\""
-            if (filter.pathPrefix != "") manifest = "$manifest android:pathPrefix=\"${mobileAndroidXml(filter.pathPrefix)}\""
-            if (filter.mimeType != "") manifest = "$manifest android:mimeType=\"${mobileAndroidXml(filter.mimeType)}\""
-            manifest = "$manifest />\n"
-        }
-        manifest = "$manifest            </intent-filter>\n"
+        if (mobileAndroidAssistantIntentFilter(filter)) {
+            assistantFilters = assistantFilters + 1
+        } else regularFilters = regularFilters + 1
         filterIndex = filterIndex + 1
     }
-    "$manifest        </activity>\n    </application>\n</manifest>\n"
+    if (regularFilters > 0) {
+        manifest = "$manifest        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileActivity\"\n            android:exported=\"true\">\n"
+        filterIndex = 0
+        while (filterIndex < configuration.intentFilters.size) {
+            val filter = configuration.intentFilters[filterIndex]
+            if (!mobileAndroidAssistantIntentFilter(filter)) {
+                manifest = "$manifest${mobileAndroidIntentFilterXml(filter)}"
+            }
+            filterIndex = filterIndex + 1
+        }
+        manifest = "$manifest        </activity>\n"
+    }
+    if (assistantFilters > 0) {
+        manifest = "$manifest        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileAssistantActivity\"\n            android:excludeFromRecents=\"true\"\n            android:exported=\"true\"\n            android:launchMode=\"singleTop\"\n            android:taskAffinity=\"\"\n            android:theme=\"@style/AblaMobileAssistantTheme\">\n"
+        filterIndex = 0
+        while (filterIndex < configuration.intentFilters.size) {
+            val filter = configuration.intentFilters[filterIndex]
+            if (mobileAndroidAssistantIntentFilter(filter)) {
+                manifest = "$manifest${mobileAndroidIntentFilterXml(filter)}"
+            }
+            filterIndex = filterIndex + 1
+        }
+        manifest = "$manifest        </activity>\n"
+        manifest = "$manifest        <service\n            android:name=\"org.abla.mobile.host.AblaVoiceInteractionService\"\n            android:exported=\"true\"\n            android:permission=\"android.permission.BIND_VOICE_INTERACTION\">\n            <intent-filter>\n                <action android:name=\"android.service.voice.VoiceInteractionService\" />\n            </intent-filter>\n            <meta-data\n                android:name=\"android.voice_interaction\"\n                android:resource=\"@xml/abla_mobile_voice_interaction\" />\n        </service>\n        <service\n            android:name=\"org.abla.mobile.host.AblaVoiceInteractionSessionService\"\n            android:exported=\"false\"\n            android:permission=\"android.permission.BIND_VOICE_INTERACTION\" />\n        <service\n            android:name=\"org.abla.mobile.host.AblaVoiceRecognitionService\"\n            android:exported=\"true\"\n            android:permission=\"android.permission.BIND_SPEECH_RECOGNITION_SERVICE\">\n            <intent-filter>\n                <action android:name=\"android.speech.RecognitionService\" />\n            </intent-filter>\n        </service>\n"
+    }
+    "$manifest    </application>\n</manifest>\n"
 }
 
 compile fun mobileAndroidValues(
     configuration: MobileAndroidConfiguration
-): string = "<resources>\n    <string name=\"abla_mobile_app_name\">${mobileAndroidXml(configuration.application.title)}</string>\n    <color name=\"abla_mobile_splash_background\">${mobileAndroidXml(configuration.branding.splashBackground)}</color>\n    <style name=\"AblaMobileTheme\" parent=\"${mobileAndroidXml(configuration.branding.themeParent)}\" />\n    <style name=\"AblaMobileStartingTheme\" parent=\"@style/AblaMobileTheme\">\n        <item name=\"android:windowBackground\">@color/abla_mobile_splash_background</item>\n    </style>\n</resources>\n"
+): string = "<resources>\n    <string name=\"abla_mobile_app_name\">${mobileAndroidXml(configuration.application.title)}</string>\n    <color name=\"abla_mobile_splash_background\">${mobileAndroidXml(configuration.branding.splashBackground)}</color>\n    <style name=\"AblaMobileTheme\" parent=\"${mobileAndroidXml(configuration.branding.themeParent)}\" />\n    <style name=\"AblaMobileStartingTheme\" parent=\"@style/AblaMobileTheme\">\n        <item name=\"android:windowBackground\">@color/abla_mobile_splash_background</item>\n    </style>\n    <style name=\"AblaMobileAssistantTheme\" parent=\"@style/AblaMobileTheme\">\n        <item name=\"android:backgroundDimEnabled\">true</item>\n        <item name=\"android:windowBackground\">@android:color/transparent</item>\n        <item name=\"android:windowDisablePreview\">true</item>\n        <item name=\"android:windowIsTranslucent\">true</item>\n        <item name=\"android:windowNoTitle\">true</item>\n    </style>\n</resources>\n"
 
 compile fun mobileAndroidValues31(
     configuration: MobileAndroidConfiguration

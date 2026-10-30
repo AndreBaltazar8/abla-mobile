@@ -15,6 +15,8 @@ int main(void) {
     const int valid = size > 0 &&
         strstr((const char *)data, "\"protocol\":1") != NULL &&
         strstr((const char *)data, "\"type\":\"textField\"") != NULL &&
+        strstr((const char *)data, "\"type\":\"dropdown\"") != NULL &&
+        strstr((const char *)data, "\"options\":\"coder-auto|ablac|abla-mobile\"") != NULL &&
         strstr((const char *)data, "\"type\":\"slider\"") != NULL &&
         strstr((const char *)data, "\"type\":\"nativeGame\"") != NULL &&
         strstr((const char *)data, "\"game\":\"neon_drift\"") != NULL;

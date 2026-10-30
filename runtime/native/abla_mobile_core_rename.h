@@ -87,4 +87,5 @@
     abla_mobile_core_text_ascii_equal_insensitive
 #define ablaTextReadU32LittleEndian \
     abla_mobile_core_text_read_u32_little_endian
+#define ablaTextIsValidUtf8 abla_mobile_core_text_is_valid_utf8
 #endif

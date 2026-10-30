@@ -89,6 +89,13 @@ void abla_mobile_value_text_read_u32_little_endian(
     *out = abla_mobile_core_text_read_u32_little_endian(*text, *offset);
 }
 
+void abla_mobile_value_text_is_valid_utf8(
+    AblaValue *out,
+    const AblaValue *text
+) {
+    *out = abla_mobile_core_text_is_valid_utf8(*text);
+}
+
 void abla_mobile_value_memory_promote_string(
     AblaValue *out,
     const AblaValue *value

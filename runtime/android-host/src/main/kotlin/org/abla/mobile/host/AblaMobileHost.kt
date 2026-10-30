@@ -18,6 +18,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +35,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,7 +48,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -71,6 +81,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -87,6 +101,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,7 +109,10 @@ import kotlin.math.roundToInt
 import org.json.JSONObject
 
 @Composable
-fun AblaMobileHost(modifier: Modifier = Modifier) {
+fun AblaMobileHost(
+    modifier: Modifier = Modifier,
+    assistantSurface: Boolean = false,
+) {
     HandlePlatformEffects()
     val state = NativeBridge.state.collectAsState().value
     when (state) {
@@ -106,7 +124,14 @@ fun AblaMobileHost(modifier: Modifier = Modifier) {
                 colorScheme = if (tree.darkTheme) darkColorScheme() else
                     lightColorScheme(),
             ) {
-                TreeScreen(tree, modifier)
+                TreeScreen(
+                    tree,
+                    if (assistantSurface) {
+                        modifier.clip(
+                            RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                        )
+                    } else modifier,
+                )
             }
         }
     }
@@ -153,6 +178,18 @@ private fun HandlePlatformEffects() {
                     }
                 }
                 4 -> view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                5 -> try {
+                    NativeBridge.playAudio(effect.payload)
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Could not play the spoken result", Toast.LENGTH_SHORT).show()
+                }
+                6 -> NativeBridge.stopAudio()
+                7 -> try {
+                    NativeBridge.downloadArtifact(context, effect.payload)
+                    Toast.makeText(context, "Downloading artifact", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Could not download artifact", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -209,6 +246,7 @@ private fun FailureScreen(failure: HostState.Failed, modifier: Modifier) {
 @Composable
 private fun TreeScreen(tree: UiTree, modifier: Modifier) {
     val background = mobileColor(tree.background, MaterialTheme.colorScheme.background)
+    val drawn = remember(tree.revision) { booleanArrayOf(false) }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = background,
@@ -216,7 +254,13 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
             if (tree.showTopBar) TopAppBar(title = { Text(tree.title) })
         },
     ) { contentPadding ->
-        Box(Modifier.fillMaxSize().padding(contentPadding)) {
+        Box(Modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding).drawWithContent {
+            drawContent()
+            if (!drawn[0]) {
+                drawn[0] = true
+                NativeBridge.traceLatency("draw")
+            }
+        }) {
             RenderNode(tree, tree.root, Modifier.fillMaxSize())
         }
     }
@@ -227,11 +271,29 @@ private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier
     key(node.key) {
         val tagged = modifier.testTag(node.key)
         when (node.type) {
+            "input" -> RenderInput(tree,node,tagged)
+            "appScaffold" -> RenderAppScaffold(tree,node,tagged)
+            "theme" -> {
+                val base = MaterialTheme.colorScheme
+                MaterialTheme(colorScheme = base.copy(
+                    primary = mobileColor(node.text("primary"), base.primary),
+                    onPrimary = mobileColor(node.text("onPrimary"), base.onPrimary),
+                    secondary = mobileColor(node.text("primary"), base.secondary),
+                    surface = mobileColor(node.text("surface"), base.surface),
+                    onSurface = mobileColor(node.text("onSurface"), base.onSurface),
+                    onSurfaceVariant = mobileColor(node.text("muted"), base.onSurfaceVariant),
+                    outline = mobileColor(node.text("outline"), base.outline),
+                )) { node.children.firstOrNull()?.let { RenderNode(tree, it, tagged) } }
+            }
             "column" -> RenderColumn(tree, node, tagged)
+            "chatList" -> RenderChatList(tree,node,tagged)
+            "richText" -> RenderRichText(node,tagged)
+            "bottomScaffold" -> RenderBottomScaffold(tree, node, tagged)
             "row" -> RenderRow(tree, node, tagged)
             "text" -> RenderText(node, tagged)
             "button" -> RenderButton(tree, node, tagged)
             "textField" -> RenderTextField(tree, node, tagged)
+            "dropdown" -> RenderDropdown(tree, node, tagged)
             "switch" -> ToggleRow(
                 node = node,
                 modifier = tagged,
@@ -273,7 +335,7 @@ private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier
             "slider" -> RenderSlider(tree, node, tagged)
             "progress" -> RenderProgress(node, tagged)
             "divider" -> HorizontalDivider(tagged)
-            "spacer" -> Spacer(tagged.height(node.int("height", 8).dp))
+            "spacer" -> Spacer(tagged.height(node.int("height", 8).dp).then(if(node.int("width")>0) Modifier.width(node.int("width").dp) else Modifier))
             "card" -> RenderCard(tree, node, tagged)
             "chip" -> FilterChip(
                 selected = node.bool("selected"),
@@ -309,6 +371,25 @@ private fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier
 }
 
 @Composable
+private fun RenderBottomScaffold(tree: UiTree, node: UiNode, modifier: Modifier) {
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = mobileColor(node.text("background"), MaterialTheme.colorScheme.background),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            node.children.firstOrNull()?.let { content ->
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    RenderNode(tree, content, Modifier.fillMaxSize())
+                }
+            }
+            node.children.getOrNull(1)?.let { bottomBar ->
+                RenderNode(tree, bottomBar, Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
 private fun RenderTextField(tree: UiTree, node: UiNode, modifier: Modifier) {
     val modelValue = node.text("value")
     var editingValue by remember(node.key) { mutableStateOf(modelValue) }
@@ -323,17 +404,71 @@ private fun RenderTextField(tree: UiTree, node: UiNode, modifier: Modifier) {
             editingValue = it
             NativeBridge.dispatch(tree, node, it)
         },
-        label = { Text(node.text("label")) },
-        singleLine = true,
+        label = if (node.bool("placeholder")) null else ({ Text(node.text("label")) }),
+        placeholder = if (node.bool("placeholder")) ({ Text(node.text("label")) }) else null,
+        shape = RoundedCornerShape(node.int("radius", 4).dp),
+        singleLine = !node.bool("multiline"),
+        maxLines = if (node.bool("multiline")) 4 else 1,
         visualTransformation = if (node.bool("secure"))
             PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = if (node.bool("secure"))
             KeyboardOptions(keyboardType = KeyboardType.Password)
+        else if (node.text("keyboard") == "number") KeyboardOptions(keyboardType = KeyboardType.Number)
+        else if (node.text("keyboard") == "email") KeyboardOptions(keyboardType = KeyboardType.Email)
         else KeyboardOptions.Default,
         modifier = modifier.fillMaxWidth().onFocusChanged {
             focused = it.isFocused
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RenderDropdown(tree: UiTree, node: UiNode, modifier: Modifier) {
+    val options = node.text("options").split('|').filter { it.isNotEmpty() }
+    val enabled = node.bool("enabled", true) && options.isNotEmpty()
+    val selected = node.text("value").takeIf { it in options }
+        ?: options.firstOrNull().orEmpty()
+    var expanded by remember(node.key) { mutableStateOf(false) }
+    LaunchedEffect(enabled) {
+        if (!enabled) expanded = false
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded && enabled,
+        onExpandedChange = {
+            if (enabled) expanded = !expanded
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            enabled = enabled,
+            label = { Text(node.text("label")) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded && enabled,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        expanded = false
+                        NativeBridge.dispatch(tree, node, option)
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -374,9 +509,12 @@ private fun RenderRow(tree: UiTree, node: UiNode, modifier: Modifier) {
     Row(
         modifier = rowModifier,
         horizontalArrangement = arrangement,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if(node.text("alignment")=="top") Alignment.Top else Alignment.CenterVertically,
     ) {
-        node.children.forEach { child -> RenderNode(tree, child) }
+        node.children.forEach { child ->
+            RenderNode(tree, child, if(child.int("layoutWeight") > 0)
+                Modifier.weight(child.int("layoutWeight").toFloat(), fill=child.bool("layoutFill",true)) else Modifier)
+        }
     }
 }
 
@@ -396,6 +534,8 @@ private fun RenderText(node: UiNode, modifier: Modifier) {
         color = mobileColor(node.text("color"), Color.Unspecified),
         fontSize = if (node.int("size") > 0) node.int("size").sp else
             androidx.compose.ui.unit.TextUnit.Unspecified,
+        lineHeight = if (node.int("lineHeight") > 0) node.int("lineHeight").sp else
+            androidx.compose.ui.unit.TextUnit.Unspecified,
         fontWeight = when (node.text("weight")) {
             "bold" -> FontWeight.Bold
             "semibold" -> FontWeight.SemiBold
@@ -414,8 +554,16 @@ private fun RenderText(node: UiNode, modifier: Modifier) {
 @Composable
 private fun RenderImage(node: UiNode, modifier: Modifier) {
     val context = LocalContext.current
+    val source = node.text("source")
+    val authorization = node.text("authorization")
+    val remote by produceState<android.graphics.Bitmap?>(if(source.startsWith("https://")) RemoteImageCache.peek(source,authorization) else null, source, authorization) {
+        if(source.startsWith("https://")) {
+            value=RemoteImageCache.peek(source,authorization)
+            value=RemoteImageCache.get(source,authorization)
+        }
+    }
     val resource = context.resources.getIdentifier(
-        node.text("source"),
+        if (source.startsWith("https://")) node.text("fallback") else source,
         "drawable",
         context.packageName,
     )
@@ -425,7 +573,14 @@ private fun RenderImage(node: UiNode, modifier: Modifier) {
     if (node.int("radius") > 0) {
         imageModifier = imageModifier.clip(RoundedCornerShape(node.int("radius").dp))
     }
-    if (resource == 0) {
+    if (remote != null) {
+        Box(imageModifier, contentAlignment = Alignment.Center) {
+            Image(bitmap = remote!!.asImageBitmap(), contentDescription = node.text("description").ifEmpty { null },
+                modifier = Modifier.size(node.int("width").dp, node.int("height").dp).clip(RoundedCornerShape(node.int("radius").dp)), contentScale = if(node.text("scale")=="fit") ContentScale.Fit else ContentScale.Crop)
+        }
+    } else if (resource == 0 && (source.isEmpty() || source.startsWith("https://"))) {
+        Box(imageModifier)
+    } else if (resource == 0) {
         Box(
             imageModifier.background(Color(0xFF2A2344)),
             contentAlignment = Alignment.Center,
@@ -448,9 +603,10 @@ private fun RenderImage(node: UiNode, modifier: Modifier) {
 private fun RenderSurface(tree: UiTree, node: UiNode, modifier: Modifier) {
     var surfaceModifier = modifier
     if (node.bool("compact")) surfaceModifier = surfaceModifier.wrapContentWidth()
+    if (node.int("width") > 0) surfaceModifier = surfaceModifier.width(node.int("width").dp)
     if (node.int("height") > 0) surfaceModifier = surfaceModifier.height(node.int("height").dp)
     if (node.long("event") > 0L) {
-        surfaceModifier = surfaceModifier.clickable { NativeBridge.dispatch(tree, node) }
+        surfaceModifier = surfaceModifier.clip(RoundedCornerShape(node.int("radius").dp)).clickable(enabled = node.bool("enabled", true)) { NativeBridge.dispatch(tree, node) }
     }
     Surface(
         modifier = surfaceModifier,
@@ -458,8 +614,9 @@ private fun RenderSurface(tree: UiTree, node: UiNode, modifier: Modifier) {
         shape = RoundedCornerShape(node.int("radius").dp),
     ) {
         Column(
-            Modifier.padding(node.int("padding").dp),
-            verticalArrangement = Arrangement.spacedBy(node.int("spacing").dp),
+            Modifier.then(if(node.bool("centerContent")) Modifier.fillMaxSize() else Modifier).padding(node.int("padding").dp),
+            verticalArrangement = if(node.bool("centerContent")) Arrangement.Center else Arrangement.spacedBy(node.int("spacing").dp),
+            horizontalAlignment = if(node.bool("centerContent")) Alignment.CenterHorizontally else Alignment.Start,
         ) {
             node.children.forEach { child ->
                 RenderNode(
@@ -793,4 +950,137 @@ private fun RenderCard(tree: UiTree, node: UiNode, modifier: Modifier) {
             }
         }
     }
+}
+
+@Composable
+private fun RenderInput(tree: UiTree, node: UiNode, modifier: Modifier) {
+    val model = node.text("value")
+    var editing by remember(node.key) { mutableStateOf(model) }
+    var focused by remember(node.key) { mutableStateOf(false) }
+    if (!focused && editing != model) editing = model
+    // Server acknowledgement can clear a draft while the keyboard remains open.
+    LaunchedEffect(model) { if (model.isEmpty()) editing = "" }
+    val controller = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val code = node.text("keyboard") == "number"
+    val background = mobileColor(node.text("background"), Color.White)
+    val shape = RoundedCornerShape(node.int("radius", 10).dp)
+    androidx.compose.foundation.text.BasicTextField(
+        value = editing,
+        onValueChange = { raw ->
+            val next = if (code) raw.filter { it in '0'..'9' }.take(node.int("maxLength",8)) else raw.take(node.int("maxLength",1500))
+            editing = next
+            NativeBridge.dispatch(tree,node,next)
+        },
+        enabled = node.bool("enabled",true),
+        textStyle = androidx.compose.ui.text.TextStyle(
+            color = Color(0xFF172D28), fontSize = node.int("size",16).sp,
+            lineHeight = 24.sp,
+            letterSpacing = if(code) 5.sp else 0.sp,
+        ),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF203E37)),
+        singleLine = !node.bool("multiline"),
+        maxLines = if(node.bool("multiline")) 4 else 1,
+        visualTransformation = if(node.bool("secure")) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if(code) KeyboardType.Number else if(node.bool("secure")) KeyboardType.Password else if(node.text("keyboard")=="email") KeyboardType.Email else KeyboardType.Text,
+            imeAction = if(node.long("submitEvent")>0) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default,
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+            if(node.long("submitEvent")>0) {
+                controller?.hide()
+                NativeBridge.sendEvent(tree.revision,node.long("submitEvent"),ByteArray(0))
+            }
+        }),
+        modifier = modifier.fillMaxWidth()
+            .heightIn(min=node.int("height",50).dp)
+            .clip(shape).background(background)
+            .then(if(node.bool("border",true)) Modifier.border(1.dp,if(focused) Color(0xFF41695A) else Color(0xFFDDE4DF),shape) else Modifier)
+            .onFocusChanged { focused=it.isFocused }
+            .semantics { contentDescription=node.text("label") },
+        decorationBox = { inner ->
+            Box(Modifier.padding(horizontal=14.dp,vertical=node.int("paddingY",12).dp),contentAlignment=Alignment.CenterStart) {
+                if(editing.isEmpty()) Text(node.text("label"),color=Color(0xFF84918B),fontSize=node.int("size",16).sp)
+                inner()
+            }
+        },
+    )
+}
+
+@Composable
+private fun RenderAppScaffold(tree: UiTree,node: UiNode,modifier: Modifier) {
+    Column(modifier.fillMaxSize().imePadding().background(mobileColor(node.text("background"),Color.White))) {
+        node.children.getOrNull(0)?.let { RenderNode(tree,it,Modifier.fillMaxWidth()) }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            node.children.getOrNull(1)?.let { RenderNode(tree,it,Modifier.fillMaxSize()) }
+        }
+        node.children.getOrNull(2)?.let { RenderNode(tree,it,Modifier.fillMaxWidth()) }
+    }
+}
+
+// Stable message keys preserve the viewport through polling and edits. Read receipts
+// come only from fully visible rows while the activity is resumed.
+@Composable
+private fun RenderChatList(tree: UiTree,node: UiNode,modifier: Modifier) {
+    val state=androidx.compose.foundation.lazy.rememberLazyListState()
+    var positioned by remember(node.key) { mutableStateOf(false) }
+    var sentRead by remember(node.key) { mutableStateOf(0) }
+    var previousCount by remember(node.key) { mutableStateOf(0) }
+    val latestNode by androidx.compose.runtime.rememberUpdatedState(node)
+    val latestTree by androidx.compose.runtime.rememberUpdatedState(tree)
+    val lifecycle=androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(node.key,node.children.size) {
+        if(!positioned && node.children.any { it.int("messageId")>0 }) {
+            val unread=node.int("lastRead")
+            val index=node.children.indexOfFirst { it.int("messageId")>unread }
+            state.scrollToItem(if(node.bool("unread") && index>=0) index else (node.children.size-1).coerceAtLeast(0))
+            positioned=true
+        } else if(positioned && node.children.size>previousCount && state.layoutInfo.visibleItemsInfo.lastOrNull()?.index==previousCount-1) {
+            state.scrollToItem(node.children.lastIndex)
+        }
+        previousCount=node.children.size
+    }
+    LaunchedEffect(node.key,tree.revision) {
+        kotlinx.coroutines.delay(220)
+        if(positioned && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            val layout=state.layoutInfo
+            val last=layout.visibleItemsInfo.filter { it.offset>=layout.viewportStartOffset && it.offset+it.size<=layout.viewportEndOffset }.maxOfOrNull { node.children.getOrNull(it.index)?.int("messageId")?:0 }?:0
+            if(last>node.int("lastRead") && last>sentRead) {sentRead=last;NativeBridge.dispatch(tree,node,last.toString())}
+        }
+    }
+    LaunchedEffect(node.key) {
+        androidx.compose.runtime.snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }.collect {
+            kotlinx.coroutines.delay(180)
+            if(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                val layout=state.layoutInfo
+                val last=layout.visibleItemsInfo.filter { it.offset>=layout.viewportStartOffset && it.offset+it.size<=layout.viewportEndOffset }.maxOfOrNull { latestNode.children.getOrNull(it.index)?.int("messageId")?:0 }?:0
+                if(last>latestNode.int("lastRead") && last>sentRead) {sentRead=last;NativeBridge.dispatch(latestTree,latestNode,last.toString())}
+            }
+        }
+    }
+    LazyColumn(modifier.fillMaxSize(),state=state,contentPadding=androidx.compose.foundation.layout.PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        items(node.children,key={it.key}) { RenderNode(tree,it,Modifier.fillMaxWidth()) }
+    }
+}
+@Composable
+private fun RenderRichText(node: UiNode,modifier: Modifier) {
+    val parts=try { org.json.JSONArray(node.text("parts")) } catch (_: Exception) { org.json.JSONArray() }
+    val inline=mutableMapOf<String,androidx.compose.foundation.text.InlineTextContent>()
+    val text=androidx.compose.ui.text.buildAnnotatedString {
+        for(i in 0 until parts.length()) {
+            val part=parts.getJSONObject(i)
+            if(part.optString("kind")=="emoji") {
+                val id="emoji-$i"
+                pushStringAnnotation("androidx.compose.foundation.text.inlineContent",id)
+                append(part.optString("text"));pop()
+                inline[id]=androidx.compose.foundation.text.InlineTextContent(androidx.compose.ui.text.Placeholder(22.sp,22.sp,androidx.compose.ui.text.PlaceholderVerticalAlign.Center)) {
+                    RenderImage(UiNode("image",id,JSONObject().put("source",node.text("base")+part.optString("key")).put("authorization",node.text("authorization")).put("description",part.optString("text")).put("width",22).put("height",22),emptyList()),Modifier.size(22.dp))
+                }
+            } else {
+                if(part.optString("kind")=="mention") pushStyle(androidx.compose.ui.text.SpanStyle(color=Color(0xFF286953),fontWeight=FontWeight.SemiBold))
+                append(part.optString("text"))
+                if(part.optString("kind")=="mention") pop()
+            }
+        }
+    }
+    Text(text,modifier,color=Color(0xFF172D28),fontSize=15.sp,lineHeight=21.sp,inlineContent=inline)
 }

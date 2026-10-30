@@ -6,6 +6,9 @@ compile val mobileEffectToastKind = 1
 compile val mobileEffectClipboardKind = 2
 compile val mobileEffectOpenUrlKind = 3
 compile val mobileEffectHapticKind = 4
+compile val mobileEffectPlayAudioKind = 5
+compile val mobileEffectStopAudioKind = 6
+compile val mobileEffectDownloadKind = 7
 
 noescape extern:"c" fun abla_mobile_platform_effect(
     kind: int,
@@ -24,6 +27,25 @@ fun mobileOpenUrl(url: string): bool =
 fun mobileHaptic(): bool =
     abla_mobile_platform_effect(#mobileEffectHapticKind, "") == 1
 
+// Play one bounded remote completion message. The URL must be http(s); the
+// reusable host owns Android MediaPlayer and never receives Abla state.
+fun mobilePlayAudio(url: string): bool =
+    abla_mobile_platform_effect(#mobileEffectPlayAudioKind, url) == 1
+
+// Stop and release the host-owned completion player. This is safe before,
+// during, or after playback and does not retain application state.
+fun mobileStopAudio(): bool =
+    abla_mobile_platform_effect(#mobileEffectStopAudioKind, "") == 1
+
+// Download a task artifact through Android's DownloadManager. The capability
+// URL carries its own authorization; the reusable host never receives a token
+// separately or retains application state.
+fun mobileDownloadArtifact(url: string, name: string, mimeType: string): bool =
+    abla_mobile_platform_effect(
+        #mobileEffectDownloadKind,
+        "$url\n$name\n$mimeType"
+    ) == 1
+
 // Result-bearing platform work uses copied request IDs and serialized
 // completion events. The Android host never receives an Abla callback or
 // application-state handle.
@@ -41,6 +63,29 @@ fun mobileHttpGet(url: string): int = mobileHttpRequest("GET", url)
 fun mobileHttpPost(url: string, body: string): int =
     mobileHttpRequest("POST", url, body)
 
+// Voice capture is a generic result-bearing platform service. VOICEON starts
+// a bounded 16 kHz mono WAV capture after Android runtime permission. VOICEUP
+// stops it and uploads multipart audio directly to the authenticated endpoint.
+// The body is app-owned JSON containing `repository` and `token` strings.
+// Android currently accepts limits from 10 seconds through 30 minutes.
+fun mobileVoiceStart(maxSeconds: int = 180): int =
+    mobileHttpRequest("VOICEON", "$maxSeconds", "")
+
+fun mobileVoiceCancel(): int = mobileHttpRequest("VOICEOFF", "local", "")
+
+fun mobileVoiceSubmit(url: string, settings: string): int =
+    mobileHttpRequest("VOICEUP", url, settings)
+
+// Request Android's assistant role. Apps also need an ACTION_ASSIST filter in
+// their typed Android build configuration to qualify for the role.
+fun mobileRequestAssistantRole(): int =
+    mobileHttpRequest("ASSIST", "local", "")
+
+// Re-enter the serialized Abla event loop after a bounded delay. Applications
+// use this to poll long-running work without moving timers or state to Kotlin.
+fun mobileDelay(milliseconds: int): int =
+    mobileHttpRequest("TIMER", "$milliseconds", "")
+
 // Small secrets such as opaque refresh tokens are stored by the reusable
 // Android host with an app-private Android Keystore key. Results use the same
 // copied completion event as HTTP requests; no native or Abla handle crosses
@@ -53,3 +98,7 @@ fun mobileSecureSet(key: string, value: string): int =
 
 fun mobileSecureDelete(key: string): int =
     mobileHttpRequest("STOREDEL", key, "")
+
+// Select one image via the system picker. Returns 200 with a metadata-free,
+// square JPEG as base64 (at most 10000 decoded bytes), or 204 on cancellation.
+fun mobilePickProfileImage(): int = mobileHttpRequest("PICKIMG", "local", "")

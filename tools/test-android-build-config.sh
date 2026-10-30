@@ -22,6 +22,16 @@ grep -Fq 'android:icon="@mipmap/app_icon"' "$generated/AndroidManifest.xml"
 grep -Fq 'android.permission.CAMERA' "$generated/AndroidManifest.xml"
 grep -Fq 'android.intent.action.SEND' "$generated/AndroidManifest.xml"
 grep -Fq 'android:mimeType="image/*"' "$generated/AndroidManifest.xml"
+grep -Fq 'org.abla.mobile.host.AblaMobileAssistantActivity' \
+    "$generated/AndroidManifest.xml"
+grep -Fq 'android:theme="@style/AblaMobileAssistantTheme"' \
+    "$generated/AndroidManifest.xml"
+grep -Fq 'org.abla.mobile.host.AblaVoiceInteractionService' \
+    "$generated/AndroidManifest.xml"
+grep -Fq 'android.service.voice.VoiceInteractionService' \
+    "$generated/AndroidManifest.xml"
+grep -Fq 'android:resource="@xml/abla_mobile_voice_interaction"' \
+    "$generated/AndroidManifest.xml"
 grep -Fq 'android:windowSplashScreenAnimatedIcon' \
     "$generated/res/values-v31/abla_mobile.xml"
 

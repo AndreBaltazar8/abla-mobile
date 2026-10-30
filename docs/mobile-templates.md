@@ -100,6 +100,7 @@ preserve control and list identity across whole-root rerenders.
 | `PulseBadge` | `key`, `text`, `background`, `color`, `accent`, `visible` |
 | `Button` | `key`, `enabled`, `appearance`, `text`, required `onTap`, `visible` |
 | `TextField` | `key`, `label`, `value`, `secure`, required `onChange`, `visible` |
+| `Dropdown` | `key`, `label`, `options`, `value`, `enabled`, required `onChange`, `visible` |
 | `Switch` | `key`, `label`, `checked`, required `onChange`, `visible` |
 | `Checkbox` | `key`, `label`, `checked`, required `onChange`, `visible` |
 | `Slider` | `key`, `label`, `value`, `minimum`, `maximum`, required `onChange`, `visible` |
@@ -124,6 +125,8 @@ shape fail during parsing.
 Android host resolves them from the application drawable bundle; another host
 can resolve the same name from its native asset catalog. `ActionGrid.labels`
 uses `|` separators and sends the tapped zero-based index in `value`.
+`Dropdown.options` also uses `|` separators; its native menu sends the selected
+option text in `value`.
 `Row.arrangement` accepts `start`, `center`, `end`, or `spaceBetween`.
 Colors use `#RRGGBB` or `#AARRGGBB` strings.
 
