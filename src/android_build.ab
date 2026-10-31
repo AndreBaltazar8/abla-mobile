@@ -300,7 +300,7 @@ compile fun mobileAndroidManifest(
         filterIndex = filterIndex + 1
     }
     if (regularFilters > 0) {
-        manifest = "$manifest        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileActivity\"\n            android:exported=\"true\">\n"
+        manifest = "$manifest        <activity\n            android:name=\"org.abla.mobile.host.AblaMobileActivity\"\n            android:launchMode=\"singleTask\"\n            android:exported=\"true\">\n"
         filterIndex = 0
         while (filterIndex < configuration.intentFilters.size) {
             val filter = configuration.intentFilters[filterIndex]

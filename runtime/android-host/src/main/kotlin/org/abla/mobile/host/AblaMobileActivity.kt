@@ -32,6 +32,8 @@ open class AblaMobileActivity : ComponentActivity() {
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
         NativeBridge.attachActivity(this)
+        // A link that starts the app: its first screen is the link's, not the one before it.
+        if (savedInstanceState == null && intent?.action == Intent.ACTION_VIEW) NativeBridge.holdFirstTree()
         if (!NativeBridge.start()) {
             NativeBridge.fail(
                 HostFailureKind.Startup,
@@ -79,14 +81,10 @@ open class AblaMobileActivity : ComponentActivity() {
         val payload = JSONObject().put("kind", "openUrl").put("url", uri)
             .toString().toByteArray(Charsets.UTF_8)
         Thread {
-            repeat(100) {
-                val ready = NativeBridge.state.value as? HostState.Ready
-                if (ready != null) {
-                    Thread.sleep(500)
-                    NativeBridge.sendEvent(ready.tree.revision, ASSISTANT_EVENT, payload)
-                    return@Thread
-                }
-                Thread.sleep(50)
+            repeat(500) {
+                val revision = NativeBridge.heldRevision() ?: (NativeBridge.state.value as? HostState.Ready)?.tree?.revision
+                if (revision != null && NativeBridge.sendEvent(revision, ASSISTANT_EVENT, payload)) return@Thread
+                Thread.sleep(10)
             }
         }.start()
     }

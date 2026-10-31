@@ -116,10 +116,28 @@ internal object NativeBridge {
         payload: ByteArray,
     ): Boolean
 
+    // A link is starting the app: its first tree stays off the screen until the next one, the
+    // link's, or for a moment if the app has nothing to say about it.
+    private var holding = false
+    private var held: HostState.Ready? = null
+
+    fun holdFirstTree() = synchronized(mutableState) {
+        if (mutableState.value is HostState.Loading) holding = true
+    }
+
+    fun heldRevision(): Long? = synchronized(mutableState) { held?.tree?.revision }
+
+    private fun releaseHeldTree() = synchronized(mutableState) {
+        val tree = held
+        holding = false
+        held = null
+        if (tree != null) mutableState.value = tree
+    }
+
     @JvmStatic
     fun onTreeFromNative(bytes: ByteArray) {
         traceLatency("tree")
-        mutableState.value = try {
+        val state = try {
             val source = bytes.toString(Charsets.UTF_8)
             HostState.Ready(UiTree.fromJson(JSONObject(source)))
         } catch (failure: Exception) {
@@ -127,6 +145,16 @@ internal object NativeBridge {
                 HostFailureKind.Protocol,
                 "Invalid Abla UI tree: ${failure.message ?: failure.javaClass.simpleName}",
             )
+        }
+        synchronized(mutableState) {
+            if (holding && state is HostState.Ready && held == null) {
+                held = state
+                timerExecutor.schedule({ releaseHeldTree() }, 1500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                return
+            }
+            holding = false
+            held = null
+            mutableState.value = state
         }
     }
 
@@ -1006,7 +1034,7 @@ internal data class UiNode(
         // Abla One nodes (abla-one/SPEC.md §6), rendered by OneRenderer.kt.
         private val oneTypes = setOf(
             "one.column", "one.row", "one.stack", "one.scroll", "one.feed", "one.text", "one.rich",
-            "one.icon", "one.image", "one.pressable", "one.link", "one.input", "one.spacer", "one.divider", "one.native",
+            "one.icon", "one.image", "one.bitmap", "one.popover", "one.pressable", "one.link", "one.input", "one.spacer", "one.divider", "one.native",
         )
 
         fun fromJson(

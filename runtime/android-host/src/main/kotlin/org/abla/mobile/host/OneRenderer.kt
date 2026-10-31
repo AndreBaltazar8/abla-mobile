@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalUriHandler
@@ -66,6 +69,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
@@ -239,7 +249,7 @@ private val LocalOneDefinite = androidx.compose.runtime.compositionLocalOf { tru
 
 private fun oneStretches(child: UiNode): Boolean {
     val p = OneProps(child)
-    return p.s("width").isEmpty() && child.type != "one.icon" && child.type != "one.image" && child.type != "one.spacer"
+    return p.s("width").isEmpty() && child.type != "one.icon" && child.type != "one.image" && child.type != "one.bitmap" && child.type != "one.spacer"
 }
 
 private fun oneDefiniteInColumn(child: UiNode, parentDefinite: Boolean, stretch: Boolean): Boolean {
@@ -291,6 +301,8 @@ internal fun RenderOne(tree: UiTree, node: UiNode, modifier: Modifier) {
         "one.rich" -> OneRich(node, p, modifier)
         "one.icon" -> OneIcon(p, modifier)
         "one.image" -> OneImage(node, p, modifier)
+        "one.bitmap" -> OneBitmap(p, modifier)
+        "one.popover" -> OnePopover(tree, node, p, modifier)
         "one.input" -> OneInput(tree, node, p, modifier)
         "one.divider" -> Box(modifier.oneSize(p).fillMaxWidth().height(p.i("height", 1).dp).background(p.color("background") ?: Color(0x1F000000)))
         "one.spacer" -> Spacer(
@@ -452,6 +464,68 @@ private fun OneImage(node: UiNode, p: OneProps, modifier: Modifier) {
     val height = p.i("height", size)
     Box(modifier.oneBox(p)) {
         OneRemoteImage(p.a("src"), p.a("authorization"), p.a("fallback"), p.a("label"), width, height, p.i("radius"), p.s("fit"))
+    }
+}
+
+// Sharp cells: each the same whole number of pixels, as many as fit the box, centered in it.
+@Composable
+private fun OneBitmap(p: OneProps, modifier: Modifier) {
+    val cells = p.a("cells")
+    val columns = p.ai("columns")
+    val size = p.i("size", 40)
+    val box = modifier.oneSize(p).then(if (p.has("width") || p.has("height")) Modifier else Modifier.size(size.dp))
+    Box(box.semantics { contentDescription = p.a("label") }.drawBehind {
+        val rows = if (columns > 0) cells.length / columns else 0
+        if (rows > 0) {
+            val cell = minOf(this.size.width.toInt() / columns, this.size.height.toInt() / rows).coerceAtLeast(1)
+            val left = ((this.size.width.toInt() - cell * columns) / 2).toFloat()
+            val top = ((this.size.height.toInt() - cell * rows) / 2).toFloat()
+            // Without antialiasing: an edge is one color or the other.
+            val paint = android.graphics.Paint().apply { isAntiAlias = false }
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                paint.color = android.graphics.Color.WHITE
+                native.drawRect(left, top, left + cell * columns, top + cell * rows, paint)
+                paint.color = android.graphics.Color.BLACK
+                for (row in 0 until rows) for (column in 0 until columns) {
+                    if (cells[row * columns + column] == '1') native.drawRect(left + column * cell, top + row * cell, left + (column + 1) * cell, top + (row + 1) * cell, paint)
+                }
+            }
+        }
+    })
+}
+
+// Below the anchor, or above when only that fits, lined up with the side it asks for, inside the window.
+private class OnePopoverPosition(val end: Boolean, val gap: Int, val margin: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val wanted = if (end) anchorBounds.right - popupContentSize.width else anchorBounds.left
+        val x = wanted.coerceAtMost(windowSize.width - margin - popupContentSize.width).coerceAtLeast(margin)
+        val below = anchorBounds.bottom + gap
+        val above = anchorBounds.top - gap - popupContentSize.height
+        return IntOffset(x, if (below + popupContentSize.height > windowSize.height - margin && above >= margin) above else below)
+    }
+}
+
+// A press outside and the back button close it, through the app.
+@Composable
+private fun OnePopover(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    val latest by rememberUpdatedState(tree)
+    val dismiss by rememberUpdatedState(p.ai("onDismiss"))
+    Box(modifier.oneSize(p)) {
+        node.children.firstOrNull()?.let { RenderOne(tree, it, Modifier) }
+        node.children.getOrNull(1)?.let { panel ->
+            val end = p.a("side") == "end"
+            Popup(
+                popupPositionProvider = remember(end, density) { OnePopoverPosition(end, (4 * density).toInt(), (8 * density).toInt()) },
+                onDismissRequest = { oneSend(latest, dismiss) },
+                properties = PopupProperties(focusable = true),
+            ) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalOneDefinite provides true) {
+                    RenderOne(tree, panel, Modifier.width(IntrinsicSize.Max))
+                }
+            }
+        }
     }
 }
 
