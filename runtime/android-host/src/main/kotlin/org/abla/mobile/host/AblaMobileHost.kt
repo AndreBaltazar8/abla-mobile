@@ -97,6 +97,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
@@ -261,7 +263,18 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
                 NativeBridge.traceLatency("draw")
             }
         }) {
-            RenderNode(tree, tree.root, Modifier.fillMaxSize())
+            // An Abla One tree says which route entry it belongs to: state saved in it
+            // (scroll positions) stays with the entry, so a new one opens at the top
+            // and going back finds it as it was. While the app has entries to go back
+            // to, the system's back button is the app's.
+            val entry = tree.root.text("a.one.entry")
+            BackHandler(enabled = tree.root.text("a.one.back") == "true") {
+                NativeBridge.sendEvent(tree.revision, 2_147_483_647L, "{\"kind\":\"back\"}".toByteArray())
+            }
+            val saved = rememberSaveableStateHolder()
+            saved.SaveableStateProvider(entry) {
+                RenderNode(tree, tree.root, Modifier.fillMaxSize())
+            }
         }
     }
 }

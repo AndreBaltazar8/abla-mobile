@@ -42,7 +42,8 @@ open class AblaMobileActivity : ComponentActivity() {
             AblaMobileHost(assistantSurface = assistantSurface)
         }
         dispatchAssistantIntent(intent)
-        dispatchViewIntent(intent)
+        // Recreated (a rotation): the app already had this link.
+        if (savedInstanceState == null) dispatchViewIntent(intent)
     }
 
     override fun onResume() {
