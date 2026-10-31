@@ -666,15 +666,13 @@ Java_org_abla_mobile_host_NativeBridge_start(
     return JNI_TRUE;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_org_abla_mobile_host_NativeBridge_sendEvent(
+static jboolean abla_mobile_queue_event(
     JNIEnv *environment,
-    jobject receiver,
     jlong revision,
     jlong identifier,
-    jbyteArray payload
+    jbyteArray payload,
+    bool replace
 ) {
-    (void)receiver;
     const jsize payload_size = payload == NULL
         ? 0
         : (*environment)->GetArrayLength(environment, payload);
@@ -683,14 +681,22 @@ Java_org_abla_mobile_host_NativeBridge_sendEvent(
     }
 
     pthread_mutex_lock(&abla_bridge.mutex);
-    if (!abla_bridge.started || !abla_bridge.accepting_events ||
-        abla_bridge.event_size >= ABLA_EVENT_LIMIT) {
+    if (!abla_bridge.started || !abla_bridge.accepting_events) {
+        pthread_mutex_unlock(&abla_bridge.mutex);
+        return JNI_FALSE;
+    }
+    AblaMobileEvent *newest = abla_bridge.event_size == 0U
+        ? NULL
+        : &abla_bridge.events[(abla_bridge.event_head + abla_bridge.event_size - 1U) % ABLA_EVENT_LIMIT];
+    const bool replaced = replace && newest != NULL &&
+        newest->revision == (int64_t)revision && newest->identifier == (int64_t)identifier;
+    if (!replaced && abla_bridge.event_size >= ABLA_EVENT_LIMIT) {
         pthread_mutex_unlock(&abla_bridge.mutex);
         return JNI_FALSE;
     }
     const size_t tail = (abla_bridge.event_head + abla_bridge.event_size) %
         ABLA_EVENT_LIMIT;
-    AblaMobileEvent *event = &abla_bridge.events[tail];
+    AblaMobileEvent *event = replaced ? newest : &abla_bridge.events[tail];
     event->revision = (int64_t)revision;
     event->identifier = (int64_t)identifier;
     event->payload_size = (size_t)payload_size;
@@ -703,10 +709,36 @@ Java_org_abla_mobile_host_NativeBridge_sendEvent(
             (jbyte *)event->payload
         );
     }
-    abla_bridge.event_size += 1U;
+    if (!replaced) {
+        abla_bridge.event_size += 1U;
+    }
     pthread_cond_signal(&abla_bridge.event_available);
     pthread_mutex_unlock(&abla_bridge.mutex);
     return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_abla_mobile_host_NativeBridge_sendEvent(
+    JNIEnv *environment,
+    jobject receiver,
+    jlong revision,
+    jlong identifier,
+    jbyteArray payload
+) {
+    (void)receiver;
+    return abla_mobile_queue_event(environment, revision, identifier, payload, false);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_abla_mobile_host_NativeBridge_sendChange(
+    JNIEnv *environment,
+    jobject receiver,
+    jlong revision,
+    jlong identifier,
+    jbyteArray payload
+) {
+    (void)receiver;
+    return abla_mobile_queue_event(environment, revision, identifier, payload, true);
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {

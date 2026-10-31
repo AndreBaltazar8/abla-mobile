@@ -108,6 +108,14 @@ internal object NativeBridge {
         payload: ByteArray,
     ): Boolean
 
+    // Like sendEvent, but replaces the newest queued event if it's the same one
+    // from the same tree.
+    external fun sendChange(
+        revision: Long,
+        identifier: Long,
+        payload: ByteArray,
+    ): Boolean
+
     @JvmStatic
     fun onTreeFromNative(bytes: ByteArray) {
         traceLatency("tree")
@@ -998,7 +1006,7 @@ internal data class UiNode(
         // Abla One nodes (abla-one/SPEC.md §6), rendered by OneRenderer.kt.
         private val oneTypes = setOf(
             "one.column", "one.row", "one.stack", "one.scroll", "one.feed", "one.text", "one.rich",
-            "one.icon", "one.image", "one.pressable", "one.input", "one.spacer", "one.divider", "one.native",
+            "one.icon", "one.image", "one.pressable", "one.link", "one.input", "one.spacer", "one.divider", "one.native",
         )
 
         fun fromJson(

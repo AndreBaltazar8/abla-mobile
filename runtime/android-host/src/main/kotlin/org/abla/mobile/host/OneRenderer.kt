@@ -166,6 +166,23 @@ private fun oneSend(tree: UiTree, event: Int, payload: String = "") {
     }
 }
 
+// A field's change carries its whole value, so one still queued for the same
+// tree can be replaced: fast typing can't fill the queue or outrun the app.
+private fun oneSendChange(tree: UiTree, event: Int, value: String) {
+    if (event <= 0) return
+    if (!NativeBridge.sendChange(tree.revision, event.toLong(), value.toByteArray(Charsets.UTF_8))) {
+        NativeBridge.fail("The Abla event queue is full or unavailable")
+    }
+}
+
+// Digits and the first decimal separator, which may be either one.
+private fun oneDecimal(raw: String): String {
+    var separator = false
+    return raw.filter { c ->
+        if (c == ',' || c == '.') !separator.also { separator = true } else c in '0'..'9'
+    }
+}
+
 // Size modifiers that don't depend on the parent's scope.
 private fun Modifier.oneSize(p: OneProps): Modifier {
     var m = this
@@ -294,19 +311,20 @@ private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modi
     val enabled = p.a("enabled") != "false"
     var m = modifier.oneSize(p)
     if (p.s("safeBottom") == "true") m = m.imePadding()
-    m = m.oneBox(p, pressed = pressed && press > 0)
-    if (press > 0) {
+    // Links to the web open in the browser; in-page anchors have no meaning here.
+    val href = p.a("href")
+    val opens = node.type == "one.link" && (href.startsWith("https://") || href.startsWith("http://"))
+    val uri = LocalUriHandler.current
+    m = m.oneBox(p, pressed = pressed && (press > 0 || opens))
+    if (press > 0 || opens) {
         m = m.clickable(
             interactionSource = interaction,
             indication = if (p.s("ripple") == "none" || p.has("pressed:background")) null else LocalIndication.current,
             enabled = enabled,
-        ) { oneSend(tree, press) }
-    }
-    // Links to the web open in the browser; in-page anchors have no meaning here.
-    val href = p.a("href")
-    if (node.type == "one.link" && (href.startsWith("https://") || href.startsWith("http://"))) {
-        val uri = LocalUriHandler.current
-        m = m.clickable(interactionSource = interaction, indication = LocalIndication.current) { runCatching { uri.openUri(href) } }
+        ) {
+            oneSend(tree, press)
+            if (opens) runCatching { uri.openUri(href) }
+        }
     }
     if (p.a("label").isNotEmpty()) m = m.semantics { contentDescription = p.a("label") }
     if (node.type == "one.scroll") m = m.verticalScroll(rememberScrollState())
@@ -455,20 +473,49 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
     var editing by remember(node.key) { mutableStateOf(model) }
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    if (!focused && editing != model) editing = model
-    LaunchedEffect(model) { if (model.isEmpty()) editing = "" }
+    // Values sent to the app that it hasn't shown back yet. The app answers from
+    // behind the field, so until it catches up its value is an older one of ours,
+    // not a change. Any other value is the app's own, and replaces the text.
+    val sent = remember(node.key) { mutableListOf<String>() }
+    var seen by remember(node.key) { mutableStateOf(model) }
+    var sends by remember(node.key) { mutableStateOf(0) }
+    if (model != seen) {
+        seen = model
+        val echo = sent.indexOf(model)
+        if (echo >= 0) sent.subList(0, echo + 1).clear()
+        else {
+            sent.clear()
+            editing = model
+        }
+    }
+    if (sent.isEmpty() && !focused && editing != model) editing = model
+    // An app may keep its value and ignore ours; then the field goes back to it.
+    LaunchedEffect(sends) {
+        if (sent.isNotEmpty()) {
+            kotlinx.coroutines.delay(5000)
+            sent.clear()
+            sends += 1
+        }
+    }
     val keyboard = LocalSoftwareKeyboardController.current
     val number = p.a("keyboard") == "number"
+    val decimal = p.a("keyboard") == "decimal"
     val multiline = p.a("multiline") == "true"
     val submit = p.ai("onSubmit")
     val style = oneTextStyle(p, 16)
     BasicTextField(
         value = editing,
         onValueChange = { raw ->
-            val limit = p.ai("maxLength", if (number) 8 else 4000)
-            val next = (if (number) raw.filter { it in '0'..'9' } else raw).take(limit)
-            editing = next
-            oneSend(tree, p.ai("onChange"), next)
+            val limit = p.ai("maxLength", if (number) 8 else if (decimal) 32 else 4000)
+            val next = (if (number) raw.filter { it in '0'..'9' } else if (decimal) oneDecimal(raw) else raw).take(limit)
+            if (next != editing) {
+                editing = next
+                if (p.ai("onChange") > 0) {
+                    sent.add(next)
+                    sends += 1
+                }
+                oneSendChange(tree, p.ai("onChange"), next)
+            }
         },
         enabled = p.a("enabled") != "false",
         textStyle = style.copy(letterSpacing = if (number && !p.has("tracking")) 5.sp else style.letterSpacing),
@@ -477,7 +524,7 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
         maxLines = if (multiline) p.i("maxLines", 5) else 1,
         visualTransformation = if (p.a("secure") == "true") PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (number) KeyboardType.Number else if (p.a("secure") == "true") KeyboardType.Password
+            keyboardType = if (number) KeyboardType.Number else if (decimal) KeyboardType.Decimal else if (p.a("secure") == "true") KeyboardType.Password
                 else if (p.a("keyboard") == "email") KeyboardType.Email else KeyboardType.Text,
             imeAction = if (submit > 0) ImeAction.Done else ImeAction.Default,
         ),
