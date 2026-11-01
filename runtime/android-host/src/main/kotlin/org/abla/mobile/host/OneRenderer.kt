@@ -9,6 +9,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -37,6 +39,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -296,7 +299,7 @@ private fun RowScope.oneChild(child: UiNode): Modifier {
 internal fun RenderOne(tree: UiTree, node: UiNode, modifier: Modifier) {
     val p = OneProps(node)
     when (node.type) {
-        "one.column", "one.row", "one.stack", "one.scroll", "one.pressable", "one.link" -> OneContainer(tree, node, p, modifier)
+        "one.column", "one.row", "one.scrollRow", "one.stack", "one.scroll", "one.pressable", "one.link" -> OneContainer(tree, node, p, modifier)
         "one.text" -> OneText(node, p, modifier)
         "one.rich" -> OneRich(node, p, modifier)
         "one.icon" -> OneIcon(p, modifier)
@@ -315,6 +318,7 @@ internal fun RenderOne(tree: UiTree, node: UiNode, modifier: Modifier) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
     val interaction = remember { MutableInteractionSource() }
@@ -340,12 +344,20 @@ private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modi
     }
     if (p.a("label").isNotEmpty()) m = m.semantics { contentDescription = p.a("label") }
     if (node.type == "one.scroll") m = m.verticalScroll(rememberScrollState())
+    if (node.type == "one.scrollRow") m = m.horizontalScroll(rememberScrollState())
     m = m.onePadding(p)
     val gap = p.i("gap").dp
     val align = p.s("align")
     val definite = LocalOneDefinite.current
     when (node.type) {
-        "one.row" -> Row(m, horizontalArrangement = oneArrangementH(p.s("justify"), gap), verticalAlignment = oneVertical(align, Alignment.CenterVertically)) {
+        "one.scrollRow" -> Row(m, horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+            node.children.forEach { child -> androidx.compose.runtime.key(child.key) { RenderOne(tree, child, Modifier) } }
+        }
+        "one.row" -> if (p.s("wrap") == "true") {
+            FlowRow(m, horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
+                node.children.forEach { child -> androidx.compose.runtime.key(child.key) { RenderOne(tree, child, Modifier) } }
+            }
+        } else Row(m, horizontalArrangement = oneArrangementH(p.s("justify"), gap), verticalAlignment = oneVertical(align, Alignment.CenterVertically)) {
             node.children.forEach { child ->
                 androidx.compose.runtime.key(child.key) {
                     androidx.compose.runtime.CompositionLocalProvider(LocalOneDefinite provides oneDefiniteInRow(child, definite)) {
