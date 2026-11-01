@@ -277,7 +277,7 @@ compile fun mobileAndroidManifest(
         permission = permission + 1
     }
 
-    manifest = "$manifest\n    <application\n        android:allowBackup=\"${mobileAndroidBoolean(application.allowBackup)}\"\n        android:label=\"@string/abla_mobile_app_name\"\n"
+    manifest = "$manifest\n    <application\n        android:allowBackup=\"${mobileAndroidBoolean(application.allowBackup)}\"\n        android:allowNativeHeapPointerTagging=\"false\"\n        android:label=\"@string/abla_mobile_app_name\"\n"
     if (branding.applicationIcon != "") {
         manifest = "$manifest        android:icon=\"${mobileAndroidXml(branding.applicationIcon)}\"\n"
     }

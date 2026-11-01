@@ -1033,7 +1033,7 @@ internal data class UiNode(
         )
         // Abla One nodes (abla-one/SPEC.md §6), rendered by OneRenderer.kt.
         private val oneTypes = setOf(
-            "one.column", "one.row", "one.stack", "one.scroll", "one.feed", "one.text", "one.rich",
+            "one.column", "one.row", "one.scrollRow", "one.stack", "one.scroll", "one.feed", "one.text", "one.rich",
             "one.icon", "one.image", "one.bitmap", "one.popover", "one.pressable", "one.link", "one.input", "one.spacer", "one.divider", "one.native",
         )
 
