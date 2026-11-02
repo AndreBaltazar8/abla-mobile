@@ -262,7 +262,9 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
             if (tree.showTopBar) TopAppBar(title = { Text(tree.title) })
         },
     ) { contentPadding ->
-        Box(Modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding).drawWithContent {
+        // Edge to edge, the window doesn't shrink for the keyboard: the screen does, so what's
+        // at the bottom stays above it.
+        Box(Modifier.fillMaxSize().padding(contentPadding).consumeWindowInsets(contentPadding).imePadding().drawWithContent {
             drawContent()
             if (!drawn[0]) {
                 drawn[0] = true
