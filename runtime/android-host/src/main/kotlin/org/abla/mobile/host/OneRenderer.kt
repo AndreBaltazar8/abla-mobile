@@ -250,8 +250,12 @@ private fun Modifier.onePadding(p: OneProps): Modifier =
 // would, so children only stretch inside containers whose width is definite.
 private val LocalOneDefinite = androidx.compose.runtime.compositionLocalOf { true }
 
+// A child's own alignSelf comes first, as CSS's align-self over align-items: one aligned to the start, centre or end keeps its
+// own width, as in a browser, rather than fill the column with its content placed in the middle.
 private fun oneStretches(child: UiNode): Boolean {
     val p = OneProps(child)
+    val self = p.s("alignSelf")
+    if (self.isNotEmpty() && self != "stretch") return false
     return p.s("width").isEmpty() && child.type != "one.icon" && child.type != "one.image" && child.type != "one.bitmap" && child.type != "one.spacer"
 }
 
