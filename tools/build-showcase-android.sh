@@ -2,15 +2,16 @@
 set -euo pipefail
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compiler=${ABLAC:-$project_root/../ablac/build/ablac}
+source "$project_root/tools/native-build-roots.sh"
+compiler=${ABLAC:-$ABLA_COMPILER_SOURCE_ROOT/build/ablac}
 
 "$compiler" build \
     "$project_root/examples/showcase/android_build.ab" \
     -o "$project_root/build/showcase-android-driver" \
     --fast --no-cache
 
-nix-shell "$project_root/../ablac/examples/android/shell.nix" --run \
-    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug -PablaMobileConfiguration=debug --console=plain"
+nix-shell "${ABLA_ANDROID_SHELL:-$ABLA_COMPILER_SOURCE_ROOT/examples/android/shell.nix}" --run \
+    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug -PablaMobileConfiguration=debug -PablaCompilerRoot='$ABLA_COMPILER_ROOT' --console=plain"
 
 generated="$project_root/examples/showcase/android-app/build/abla-mobile/debug"
 grep -Fq 'applicationId=org.abla.mobile.showcase' \
@@ -46,6 +47,7 @@ expected_exports=$(printf '%s\n' \
     abla_mobile_platform_effect_next_size \
     abla_mobile_platform_effect_pop \
     abla_mobile_platform_request_body_byte \
+    abla_mobile_platform_request_body_copy \
     abla_mobile_platform_request_body_size \
     abla_mobile_platform_request_method_byte \
     abla_mobile_platform_request_method_size \

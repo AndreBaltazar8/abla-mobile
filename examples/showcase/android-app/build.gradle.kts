@@ -10,6 +10,8 @@ val ablaMobileConfiguration = providers.gradleProperty("ablaMobileConfiguration"
 val ablaMobileRoot = layout.buildDirectory.dir(
     "abla-mobile/$ablaMobileConfiguration"
 ).get().asFile
+val ablaCompilerRoot = providers.gradleProperty("ablaCompilerRoot").orElse(providers.environmentVariable("ABLA_COMPILER_ROOT")).get()
+val ablaMobileSdkRoot = requireNotNull(System.getenv("ABLA_MOBILE_ROOT"))
 val ablaMobilePropertiesFile = ablaMobileRoot.resolve("application.properties")
 check(ablaMobilePropertiesFile.isFile) {
     "Missing ${ablaMobilePropertiesFile.path}; run the Abla mobile build program first"
@@ -42,7 +44,8 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments += "-DABLA_COMPILER_ROOT=${rootProject.layout.projectDirectory.dir("../ablac").asFile.absolutePath}"
+                arguments += "-DABLA_COMPILER_ROOT=$ablaCompilerRoot"
+                arguments += "-DABLA_MOBILE_ROOT=$ablaMobileSdkRoot"
                 arguments += "-DABLA_APP_OBJECT_ROOT=${ablaMobileRoot.resolve(ablaMobile.getProperty("applicationObjectRoot", "obj")).absolutePath}"
             }
         }

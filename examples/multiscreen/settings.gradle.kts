@@ -18,4 +18,4 @@ rootProject.name = "abla-mobile-multiscreen"
 
 include(":android-app")
 include(":runtime:android-host")
-project(":runtime:android-host").projectDir = file("../../runtime/android-host")
+project(":runtime:android-host").projectDir = file(requireNotNull(System.getenv("ABLA_MOBILE_ROOT")) + "/runtime/android-host")

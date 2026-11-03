@@ -2,15 +2,16 @@
 set -euo pipefail
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compiler=${ABLAC:-$project_root/../ablac/build/ablac}
+source "$project_root/tools/native-build-roots.sh"
+compiler=${ABLAC:-$ABLA_COMPILER_SOURCE_ROOT/build/ablac}
 example_directory="$project_root/examples/fullstack"
 
 "$compiler" build "$example_directory/android_build.ab" \
     -o "$project_root/build/fullstack-android-driver" \
     --fast --no-cache
 
-nix-shell "$project_root/../ablac/examples/android/shell.nix" --run \
-    "android-gradle -p '$example_directory' :android-app:assembleDebug -PablaMobileConfiguration=debug --console=plain"
+nix-shell "${ABLA_ANDROID_SHELL:-$ABLA_COMPILER_SOURCE_ROOT/examples/android/shell.nix}" --run \
+    "android-gradle -p '$example_directory' :android-app:assembleDebug -PablaMobileConfiguration=debug -PablaCompilerRoot='$ABLA_COMPILER_ROOT' --console=plain"
 
 app_source="$example_directory/android-app/src"
 if find "$app_source" -type f -name '*.kt' -print -quit | grep -q .; then

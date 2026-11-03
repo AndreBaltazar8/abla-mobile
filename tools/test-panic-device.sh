@@ -2,7 +2,8 @@
 set -euo pipefail
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-compiler=${ABLAC:-$project_root/../ablac/build/ablac}
+source "$project_root/tools/native-build-roots.sh"
+compiler=${ABLAC:-$ABLA_COMPILER_SOURCE_ROOT/build/ablac}
 serial=${ABLA_ADB_SERIAL:-127.0.0.1:47102}
 package=org.abla.mobile.panicproof
 activity=org.abla.mobile.host.AblaMobileActivity
@@ -33,8 +34,8 @@ adb -s "$serial" shell wm dismiss-keyguard
     -o "$project_root/build/android-panic-driver" \
     --fast --no-cache
 
-nix-shell "$project_root/../ablac/examples/android/shell.nix" --run \
-    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug -PablaMobileConfiguration=panic --console=plain"
+nix-shell "${ABLA_ANDROID_SHELL:-$ABLA_COMPILER_SOURCE_ROOT/examples/android/shell.nix}" --run \
+    "android-gradle -p '$project_root' :examples:showcase:android-app:assembleDebug -PablaMobileConfiguration=panic -PablaCompilerRoot='$ABLA_COMPILER_ROOT' --console=plain"
 
 apk="$project_root/examples/showcase/android-app/build/outputs/apk/debug/android-app-debug.apk"
 test -f "$apk"
