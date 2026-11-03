@@ -1,0 +1,35 @@
+import "abla/build"
+import "abla/json"
+import "abla/process"
+import "../../src/mobile.ab"
+
+// Native regression fixture: the actual One input host with a deliberately slow model.
+fun inputEchoApplication(): int {
+    mobileConfigureRuntime(268435456)
+    var value = ""
+    var revision = 0
+    var echoedFirst = false
+    while (true) {
+        revision = revision + 1
+        val field = MobileNode("one.input", "email", $json {
+            "a.value": value, "a.placeholder": "nome@empresa.pt",
+            "a.keyboard": "email", "a.onChange": "1",
+            "width": "stretch", "height": "56", "padding": "12",
+            "border": "1", "borderColor": "#444444"
+        }, [])
+        val label = MobileNode("one.text", "model", $json {"a.text": "Model length: ${value.size}; First echo: $echoedFirst"}, [])
+        val root = MobileNode("one.column", "ime-probe", $json {"padding": "24", "gap": "16"}, [field, label])
+        mobilePublishTree(mobileEncodeStyledTree(revision, "IME probe", false, root, false, "#FFFFFF"))
+        mobileRuntimeSafepoint()
+        val event = mobileWaitEvent()
+        if (event == 0) return 0
+        if (event == 1) {
+            val next = mobileEventPayload()
+            if (next == "a" || next == "an") sleep(15000)
+            value = next
+            if (next == "a") echoedFirst = true
+        }
+    }
+    0
+}
+val exported = #exportFunction("inputEchoApplication", "abla_mobile_run")

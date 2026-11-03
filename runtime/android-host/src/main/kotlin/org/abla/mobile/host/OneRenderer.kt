@@ -566,25 +566,16 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
     // Values sent to the app that it hasn't shown back yet. The app answers from
     // behind the field, so until it catches up its value is an older one of ours,
     // not a change. Any other value is the app's own, and replaces the text.
-    val sent = remember(node.key) { mutableListOf<String>() }
-    var seen by remember(node.key) { mutableStateOf(model) }
+    val echoes = remember(node.key) { OneInputEchoes(model) }
     var sends by remember(node.key) { mutableStateOf(0) }
-    if (model != seen) {
-        seen = model
-        val echo = sent.indexOf(model)
-        if (echo >= 0) sent.subList(0, echo + 1).clear()
-        else {
-            sent.clear()
-            editing = model
-        }
-    }
-    if (sent.isEmpty() && !focused && editing != model) editing = model
+    var expiredGeneration by remember(node.key) { mutableStateOf(-1) }
+    echoes.acceptModel(model, focused, expiredGeneration)?.let { if (editing != it) editing = it }
     // An app may keep its value and ignore ours; then the field goes back to it.
-    LaunchedEffect(sends) {
-        if (sent.isNotEmpty()) {
+    val generation = sends
+    LaunchedEffect(generation) {
+        if (echoes.hasPending) {
             kotlinx.coroutines.delay(5000)
-            sent.clear()
-            sends += 1
+            expiredGeneration = generation
         }
     }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -601,8 +592,8 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
             if (next != editing) {
                 editing = next
                 if (p.ai("onChange") > 0) {
-                    sent.add(next)
-                    sends += 1
+                    echoes.changed(next)
+                    sends = echoes.generation
                 }
                 oneSendChange(tree, p.ai("onChange"), next)
             }

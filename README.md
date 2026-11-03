@@ -95,6 +95,21 @@ then from this repository run:
 ./tools/build-fullstack-android.sh
 ```
 
+The Android host input acknowledgement tests run with
+`:runtime:android-host:testDebugUnitTest --configure-on-demand`. A focused
+One input retains unacknowledged edits across the five-second timeout; a late
+model echo must not replace newer text. An application-authored replacement
+still takes effect, and an ignored edit returns to the model after blur and
+timeout.
+
+`tests/native/one_input_echo.ab` is a native renderer regression fixture. Build
+it as the app entry to exercise the actual `one.input` host: focus the email
+field, type `a`, wait 5.2 seconds, then type `n` before the fifteen-second model
+echo. Wait for the persistent `First echo: true` marker, append the remaining
+email, and verify the full field both before and after model acknowledgement.
+The field must retain `an`; the old host replaces it with `a`. The marker stays
+visible so a slow accessibility read cannot miss the intermediate model frame.
+
 With an unlocked Android device connected through ADB:
 
 ```sh
