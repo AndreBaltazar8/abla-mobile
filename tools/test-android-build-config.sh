@@ -2,10 +2,13 @@
 set -euo pipefail
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-python3 "$project_root/tools/check-native-build-roots.py" --self-test
-compiler=${ABLAC:-$project_root/../ablac/build/ablac}
+source "$project_root/tools/native-build-roots.sh"
+compiler=${ABLAC:-$ABLA_COMPILER_SOURCE_ROOT/build/ablac}
 output="$project_root/build/android-config"
 generated="$project_root/build/android-config-module/build/abla-mobile/preview_1"
+
+"$compiler" build "$project_root/tests/native_build_roots.ab" -o "$output/native-roots-test" --fast
+(cd "$project_root" && "$output/native-roots-test")
 
 "$compiler" build \
     "$project_root/tests/android_build_config.ab" \

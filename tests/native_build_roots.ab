@@ -1,0 +1,12 @@
+import "abla/test"
+import "../tools/native_build_roots.ab"
+
+fun main: int {
+    expect(nativeRootsForbidden("include(\"../../abla-mobile/runtime/native\")"), "old mobile sibling escape is rejected")
+    expect(nativeRootsForbidden("dir(\"../../../ablac\")"), "old compiler sibling escape is rejected")
+    expect(!nativeRootsForbidden("include(\"$"+"{ABLA_MOBILE_ROOT}/runtime/native\")"), "selected root is accepted")
+    expect(!nativeRootsBuildFile("src/backends/android.ab"), "source imports resolve within their prepared tree")
+    expect(nativeRootsCheck(currentDirectory()), "active native build files use selected roots")
+    expect(nativeRootsSelfTest(currentDirectory()), "archive isolation and real-directory source mirror")
+    testsPassed()
+}

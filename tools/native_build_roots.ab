@@ -1,0 +1,144 @@
+import "abla/text"
+import "abla/fs"
+import "abla/io"
+import "abla/process"
+import "abla/sys/linux/process"
+
+fun nativeRootsNameByte(c: int): bool = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c == 45 || c == 95
+fun nativeRootsForbidden(line: string): bool {
+    var at = 0
+    while (at+3 <= line.size) {
+        if (line.slice(at,at+3) == "../") {
+            var end = at
+            while (end+3 <= line.size && line.slice(end,end+3) == "../") end = end+3
+            val rest = line.slice(end,line.size)
+            var nameEnd = end
+            if (rest.startsWith("abla-")) {
+                nameEnd = end+5
+                while (nameEnd < line.size && nativeRootsNameByte(line[nameEnd])) nameEnd = nameEnd+1
+                if (nameEnd == end+5) nameEnd = end
+            } else if (rest.startsWith("ablac")) nameEnd = end+5
+            if (nameEnd > end && nameEnd < line.size && (line[nameEnd] == 47 || line[nameEnd] == 34 || line[nameEnd] == 39)) return true
+        }
+        at = at+1
+    }
+    false
+}
+fun nativeRootsBuildFile(name: string): bool {
+    for (part in name.split("/")) if (part == "papermono") return false
+    val file = Path(name)
+    val base = file.name()
+    base == "CMakeLists.txt" || base == "build.gradle.kts" || base == "settings.gradle.kts" || base == "shell-desktop.nix" || base.endsWith(".cmake") || base.endsWith(".pbxproj") || (file.parent().text == "tools" && base.startsWith("build-") && base.endsWith(".sh"))
+}
+fun nativeRootsWalk(folder: Path, prefix: string, var into: array<string>): void {
+    for (entry in folder.entries()) {
+        val base = entry.name()
+        val name = if (prefix == "") base else "$prefix/$base"
+        if (entry.info().isDirectory() && !entry.isSymbolicLink()) {
+            if (!base.startsWith(".") && base != "build" && base != "vendor" && base != "node_modules") nativeRootsWalk(entry,name,into)
+        } else if (entry.info().isFile()) into.append(name)
+    }
+    return
+}
+fun nativeRootsNames(root: Path): array<string> {
+    val top = command("git").argument("rev-parse").argument("--show-toplevel").directory(root.text).errors("/dev/null").capture()
+    if (top.status == 0 && top.output.trim() == root.text) {
+        val files = command("git").argument("ls-files").argument("-z").directory(root.text).capture()
+        if (files.status == 0) return files.output.split("\x00")
+    }
+    val names: array<string> = []
+    nativeRootsWalk(root,"",names)
+    names
+}
+fun nativeRootsCheck(root: Path, report: bool = true): bool {
+    if (!root.info().isDirectory()) { if (report) eprintln("Native-root check needs an existing root directory"); return false }
+    var valid = true
+    for (name in nativeRootsNames(root)) if (name != "" && nativeRootsBuildFile(name)) {
+        var number = 0
+        for (line in root.child(name).readText().split("\n")) {
+            number = number+1
+            if (nativeRootsForbidden(line)) {
+                valid = false
+                if (report) eprintln("$name:$number: select an SDK root instead of a sibling path")
+            }
+        }
+    }
+    valid
+}
+fun nativeRootsSelfTest(root: Path): bool {
+    var valid = nativeRootsForbidden("include(\"../../abla-mobile/runtime/native\")") && nativeRootsForbidden("dir(\"../../../ablac\")") && !nativeRootsForbidden("\"$"+"{ABLA_MOBILE_ROOT}/runtime/native\"") && nativeRootsBuildFile("examples/demo/android-app/src/main/cpp/CMakeLists.txt") && !nativeRootsBuildFile("src/backends/android.ab")
+    val pid = linuxProcessId()
+    val folder = root.child("build/native-roots-self-$pid")
+    if (folder.exists() || !folder.createDirectories()) return false
+    // A selected SDK archive inside a consuming Git repository must scan itself.
+    val archive = folder.child("archive")
+    archive.createDirectories()
+    val file = archive.child("CMakeLists.txt")
+    file.writeText("include(\"$"+"{ABLA_MOBILE_ROOT}/runtime/native\")\n")
+    valid = nativeRootsCheck(archive,false) && valid
+    file.writeText("include(\"../../abla-mobile/runtime/native\")\n")
+    valid = !nativeRootsCheck(archive,false) && valid
+    val source = folder.child("source")
+    source.child("src").createDirectories()
+    source.child("examples").createDirectories()
+    source.child("tests").createDirectories()
+    source.child("src/entry.ab").writeText("selected source")
+    val mirror = folder.child("mirror")
+    valid = nativeRootsMirror(source,mirror) && valid
+    valid = !mirror.child("src").isSymbolicLink() && mirror.child("src/entry.ab").isSymbolicLink() && mirror.child("src/entry.ab").readText() == "selected source" && valid
+    source.child("src/entry.ab").writeText("updated source")
+    valid = mirror.child("src/entry.ab").readText() == "updated source" && !nativeRootsMirror(source,source) && valid
+    folder.removeTree()
+    valid
+}
+fun nativeRootsConfigure(root: Path): bool {
+    val pid = linuxProcessId()
+    val folder = root.child("build/native-roots-configure-$pid")
+    if (folder.exists() || !folder.createDirectories()) return false
+    val sdk = folder.child("selected mobile SDK/runtime/native")
+    sdk.createDirectories()
+    sdk.child("CMakeLists.txt").writeText("function(abla_mobile_add_android_application target)\nfile(WRITE \"$"+"{CMAKE_BINARY_DIR}/selected-sdk\" \"$"+"{CMAKE_CURRENT_FUNCTION_LIST_DIR}\")\nendfunction()\n")
+    var valid = true
+    var count = 0
+    for (name in nativeRootsNames(root)) if (name != "" && nativeRootsBuildFile(name) && Path(name).name() == "CMakeLists.txt" && root.child(name).readText().contains("ABLA_MOBILE_ROOT")) {
+        val output = folder.child("configure-$count")
+        val selected = sdk.parent().parent().text
+        val result = command("cmake").argument("-S").argument(root.child(name).parent().text).argument("-B").argument(output.text).argument("-DABLA_MOBILE_ROOT=$selected").output(folder.child("cmake.out").text).errors(folder.child("cmake.err").text).run()
+        if (result != 0 || output.child("selected-sdk").readText() != sdk.text) {
+            eprintln("CMake selected-root proof failed: $name")
+            valid = false
+        }
+        count = count+1
+    }
+    folder.removeTree()
+    if (count == 0) return false
+    if (valid) println("native configure: $count consumers used the selected SDK, including spaces")
+    valid
+}
+fun nativeRootsLink(link: Path, source: Path): bool {
+    if (link.isSymbolicLink()) link.remove()
+    if (link.exists()) { val name = link.text; eprintln("Unexpected real file in native mirror: $name"); return false }
+    link.linkTo(source.text)
+}
+fun nativeRootsMirrorDirectory(source: Path, target: Path): bool {
+    if (target.isSymbolicLink()) target.remove()
+    if (!target.createDirectories()) return false
+    for (entry in source.entries()) {
+        val name = entry.name()
+        val link = target.child(name)
+        if (entry.info().isDirectory() && !entry.isSymbolicLink() && name != "build" && name != ".gradle" && name != ".cxx" && name != ".kotlin") {
+            if (!nativeRootsMirrorDirectory(entry,link)) return false
+        } else if (!nativeRootsLink(link,entry)) return false
+    }
+    true
+}
+fun nativeRootsMirror(source: Path, target: Path): bool {
+    if (!target.createDirectories()) return false
+    val from = command("realpath").argument(source.text).capture()
+    val into = command("realpath").argument(target.text).capture()
+    if (from.status != 0 || into.status != 0 || from.output.trim() == into.output.trim()) return false
+    for (example in ["gallery","services"]) for (relative in ["examples/$example","examples/$example/android/android-app"]) if (!source.child(relative).child("build").createDirectories()) return false
+    for (entry in ["src","examples","tests"]) if (!nativeRootsMirrorDirectory(source.child(entry),target.child(entry))) return false
+    for (entry in ["abla.toml","abla.lock",".abla","build"]) if (source.child(entry).exists() && !nativeRootsLink(target.child(entry),source.child(entry))) return false
+    true
+}

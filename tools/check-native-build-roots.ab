@@ -1,0 +1,18 @@
+import "native_build_roots.ab"
+
+fun main: int {
+    if (processArgumentCount() == 3 && processArgument(0) == "mirror") return if (nativeRootsMirror(Path(processArgument(1)),Path(processArgument(2)))) 0 else 1
+    val hasRoot = processArgumentCount() > 0 && !processArgument(0).startsWith("--")
+    val root = if (hasRoot) Path(processArgument(0)) else currentDirectory()
+    var valid = nativeRootsCheck(root)
+    var index = if (hasRoot) 1 else 0
+    while (index < processArgumentCount()) {
+        val arg = processArgument(index)
+        if (arg == "--self-test") valid = nativeRootsSelfTest(root) && valid
+        else if (arg == "--configure-test") valid = nativeRootsConfigure(root) && valid
+        else { eprintln("Unknown native-root check option: $arg"); return 2 }
+        index = index+1
+    }
+    if (valid) println("native build roots: selected SDK paths only")
+    if (valid) 0 else 1
+}

@@ -227,7 +227,11 @@ One stages source imports through `build/native-tree` so they agree with these
 selected roots. Direct Gradle calls must provide the selected roots too; no
 Gradle/CMake fallback searches neighboring checkouts.
 
-`python3 tools/check-native-build-roots.py --self-test` rejects unselected sibling
+`build/check-native-build-roots "$PWD" --self-test` rejects unselected sibling
 paths in active native build files. With CMake installed, `--configure-test`
 checks every mobile consumer against a synthetic SDK in a path containing spaces.
 PaperMono is parked and explicitly excluded from this active-target check.
+
+The native guard and its filesystem fixtures are written in Abla. Native build
+entry points compile it with the selected compiler; the Android configuration
+suite also runs its six assertions. No interpreter is needed for these checks.
