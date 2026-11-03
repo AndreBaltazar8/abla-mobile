@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:hardwareAccelerated="true">
+        <provider android:name="org.abla.mobile.host.AblaExportProvider"
+            android:authorities="${applicationId}.abla.files" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/abla_export_paths" />
+        </provider>
         <activity
             android:name="org.abla.mobile.host.AblaMobileActivity"
             android:exported="true"

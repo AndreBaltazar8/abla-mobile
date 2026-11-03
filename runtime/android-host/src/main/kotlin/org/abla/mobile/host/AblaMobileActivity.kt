@@ -141,6 +141,10 @@ open class AblaMobileActivity : ComponentActivity() {
     @Deprecated("Android activity result compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == HostFileExports.SAVE_REQUEST) {
+            HostFileExports.finish(this, resultCode, data?.data)
+            return
+        }
         if (requestCode == FILE_PICK_REQUEST) {
             NativeBridge.onFilesPicked(if (resultCode == RESULT_OK) data else null)
             return

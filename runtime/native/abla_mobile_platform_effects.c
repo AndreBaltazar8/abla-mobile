@@ -4,7 +4,7 @@
 
 #define ABLA_MOBILE_EFFECT_LIMIT 64U
 #define ABLA_MOBILE_EFFECT_PAYLOAD_LIMIT 4096U
-#define ABLA_MOBILE_EFFECT_KIND_LIMIT 7
+#define ABLA_MOBILE_EFFECT_KIND_LIMIT 9
 #define ABLA_MOBILE_EXPORT __attribute__((visibility("default")))
 
 typedef struct AblaMobilePlatformEffect {

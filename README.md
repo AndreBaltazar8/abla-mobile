@@ -204,3 +204,13 @@ and [implementation plan](plan.md) for the exact contracts and remaining work.
 ## License
 
 Abla Mobile is licensed under the [Mozilla Public License 2.0](LICENSE).
+
+Authenticated file exports: use `SEND` with headers and `saveToFile`, then
+`mobileSaveFile` or `mobileShareFile` with JSON `{handle,name,mime}`. Only opaque
+registered `HostFiles` handles are accepted. The save destination uses Android's
+create-document intent; sharing uses a read-only grant over a copy in the
+provider's dedicated cache directory. No URL, cookie or HTTP header is passed to
+other apps. Listen for the platform `fileExport` event (`saved`, `shared`,
+`cancelled`, `failed`, plus the opaque handle); `shared` only confirms chooser launch. File copies expire
+from cache after a day on the next share. No storage permission is requested.
+`tools/test-file-exports.sh` checks the native queue boundary.

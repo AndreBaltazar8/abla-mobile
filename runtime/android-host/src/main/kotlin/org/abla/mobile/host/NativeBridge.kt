@@ -160,13 +160,18 @@ internal object NativeBridge {
 
     @JvmStatic
     fun onEffectFromNative(kind: Int, bytes: ByteArray) {
-        if (bytes.size > 4096 || kind !in 1..7) {
+        if (bytes.size > 4096 || kind !in 1..9) {
             fail("Invalid Abla platform effect")
             return
         }
         if (!mutableEffects.tryEmit(HostEffect(kind, bytes.toString(Charsets.UTF_8)))) {
             fail("The Abla platform effect queue is full")
         }
+    }
+
+    fun exportFile(payload: String, share: Boolean) {
+        val host = activity?.get() ?: error("no foreground activity")
+        HostFileExports.launch(host, payload, share)
     }
 
     fun downloadArtifact(context: Context, payload: String) {

@@ -186,6 +186,12 @@ private fun HandlePlatformEffects() {
                     Toast.makeText(context, "Could not play the spoken result", Toast.LENGTH_SHORT).show()
                 }
                 6 -> NativeBridge.stopAudio()
+                8, 9 -> try {
+                    NativeBridge.exportFile(effect.payload, effect.kind == 9)
+                } catch (_: Exception) {
+                    HostFileExports.failed(effect.payload)
+                    Toast.makeText(context, "Could not export file", Toast.LENGTH_SHORT).show()
+                }
                 7 -> try {
                     NativeBridge.downloadArtifact(context, effect.payload)
                     Toast.makeText(context, "Downloading artifact", Toast.LENGTH_SHORT).show()

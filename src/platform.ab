@@ -9,6 +9,8 @@ compile val mobileEffectHapticKind = 4
 compile val mobileEffectPlayAudioKind = 5
 compile val mobileEffectStopAudioKind = 6
 compile val mobileEffectDownloadKind = 7
+compile val mobileEffectSaveFileKind = 8
+compile val mobileEffectShareFileKind = 9
 
 noescape extern:"c" fun abla_mobile_platform_effect(
     kind: int,
@@ -102,3 +104,9 @@ fun mobileSecureDelete(key: string): int =
 // Select one image via the system picker. Returns 200 with a metadata-free,
 // square JPEG as base64 (at most 10000 decoded bytes), or 204 on cancellation.
 fun mobilePickProfileImage(): int = mobileHttpRequest("PICKIMG", "local", "")
+
+// JSON {handle,name,mime}: an opaque registered file, with a caller-chosen safe display name.
+// The app first downloads with SEND + saveToFile and its own authorization header.
+// The host prompts for a destination or shares a read-only copy; no URLs or tokens enter an intent.
+fun mobileSaveFile(payload: string): bool = abla_mobile_platform_effect(#mobileEffectSaveFileKind, payload) == 1
+fun mobileShareFile(payload: string): bool = abla_mobile_platform_effect(#mobileEffectShareFileKind, payload) == 1
