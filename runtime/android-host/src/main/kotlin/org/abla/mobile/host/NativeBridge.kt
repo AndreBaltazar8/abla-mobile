@@ -65,6 +65,7 @@ internal object NativeBridge {
     @Volatile private var applicationContext: Context? = null
     @Volatile private var activity: WeakReference<AblaMobileActivity>? = null
     @Volatile private var pendingVoicePermissionRequest = 0L
+    @Volatile private var pendingPushPermissionRequest = 0L
     @Volatile private var pendingVoiceMaxSeconds = 180
     @Volatile private var pendingAssistantRoleRequest = 0L
     @Volatile private var mediaPlayer: MediaPlayer? = null
@@ -524,6 +525,49 @@ internal object NativeBridge {
         startVoiceCapture(requestId, maxSeconds.toString())
     }
 
+    // The app's push token (AblaPush), once Android lets it notify: 200 with the token,
+    // 403 when the person says no, 501 when the app has no push service.
+    private fun pushToken(requestId: Long, asked: Boolean = false) {
+        val provider = AblaPush.tokenProvider
+            ?: return completeHttp(requestId, 501, "", "this app has no push service")
+        val context = applicationContext
+            ?: return completeHttp(requestId, 0, "", "push is unavailable")
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            if (asked) return completeHttp(requestId, 403, "", "notifications are not allowed")
+            val owner = activity?.get()
+                ?: return completeHttp(requestId, 0, "", "the activity is unavailable")
+            if (pendingPushPermissionRequest != 0L) {
+                return completeHttp(requestId, 0, "", "a notification permission request is active")
+            }
+            pendingPushPermissionRequest = requestId
+            owner.runOnUiThread {
+                ActivityCompat.requestPermissions(
+                    owner,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    AblaMobileActivity.NOTIFICATIONS_REQUEST,
+                )
+            }
+            return
+        }
+        try {
+            provider { token, error ->
+                if (token != null) completeHttp(requestId, 200, token, "")
+                else completeHttp(requestId, 0, "", error ?: "no push token")
+            }
+        } catch (failure: Exception) {
+            completeHttp(requestId, 0, "", failure.message ?: "no push token")
+        }
+    }
+
+    fun onNotificationsPermissionResult() {
+        val requestId = pendingPushPermissionRequest
+        pendingPushPermissionRequest = 0L
+        if (requestId != 0L) pushToken(requestId, true)
+    }
+
     private fun cancelVoiceCapture(requestId: Long) {
         VoiceCapture.cancel()
         completeHttp(requestId, 204, "", "")
@@ -689,6 +733,7 @@ internal object NativeBridge {
         if (method !in setOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")) {
             return completeHttp(requestId, 0, "", "unsupported method")
         }
+        if (url == "abla:push-token") return pushToken(requestId)
         val uri = try { URI(url) } catch (_: Exception) { return completeHttp(requestId, 0, "", "invalid URL") }
         if (uri.scheme != "https" && uri.scheme != "http") return completeHttp(requestId, 0, "", "only http and https are allowed")
         val inline = try {

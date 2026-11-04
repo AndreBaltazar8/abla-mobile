@@ -20,6 +20,7 @@ open class AblaMobileActivity : ComponentActivity() {
         const val ASSISTANT_ROLE_REQUEST = 4702
         const val IMAGE_PICK_REQUEST = 4703
         const val FILE_PICK_REQUEST = 4704
+        const val NOTIFICATIONS_REQUEST = 4705
         private const val ASSISTANT_EVENT = 2_147_483_647L
     }
 
@@ -136,6 +137,7 @@ open class AblaMobileActivity : ComponentActivity() {
                 grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED,
             )
         }
+        if (requestCode == NOTIFICATIONS_REQUEST) NativeBridge.onNotificationsPermissionResult()
     }
 
     @Deprecated("Android activity result compatibility")
