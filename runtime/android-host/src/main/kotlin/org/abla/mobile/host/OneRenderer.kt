@@ -628,7 +628,14 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
         modifier = modifier.oneSize(p).oneBox(p, focused = focused)
             .semantics { contentDescription = p.a("placeholder") },
         decorationBox = { inner ->
-            Box(Modifier.onePadding(p), contentAlignment = Alignment.CenterStart) {
+            // A field taller than one line starts its text at the top, as a textarea does, as far
+            // down as it is from the left (as abla-one's desktop paints it).
+            Box(
+                if (multiline) Modifier.fillMaxSize().padding(PaddingValues(
+                    start = p.pad("Left"), top = maxOf(p.pad("Top"), p.pad("Left")), end = p.pad("Right"), bottom = p.pad("Bottom"),
+                )) else Modifier.onePadding(p),
+                contentAlignment = if (multiline) Alignment.TopStart else Alignment.CenterStart,
+            ) {
                 if (editing.isEmpty()) Text(p.a("placeholder"), style = style.copy(color = p.color("placeholderColor") ?: style.color.copy(alpha = .5f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 inner()
             }
