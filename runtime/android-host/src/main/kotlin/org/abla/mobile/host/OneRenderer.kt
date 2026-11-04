@@ -285,6 +285,15 @@ private fun ColumnScope.oneChild(child: UiNode, stretch: Boolean, definite: Bool
     return m
 }
 
+// In a stack, one that fills takes the stack's size, as in a row or column.
+private fun oneStackChild(child: UiNode): Modifier {
+    val p = OneProps(child)
+    var m: Modifier = Modifier
+    if (p.s("width") == "fill") m = m.fillMaxWidth()
+    if (p.s("height") == "fill") m = m.fillMaxHeight()
+    return m
+}
+
 private fun RowScope.oneChild(child: UiNode): Modifier {
     val p = OneProps(child)
     var m: Modifier = Modifier
@@ -377,7 +386,7 @@ private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modi
             "bottomStart" -> Alignment.BottomStart
             else -> Alignment.TopStart
         }) {
-            node.children.forEach { child -> androidx.compose.runtime.key(child.key) { RenderOne(tree, child, Modifier) } }
+            node.children.forEach { child -> androidx.compose.runtime.key(child.key) { RenderOne(tree, child, oneStackChild(child)) } }
         }
         else -> Column(m, verticalArrangement = oneArrangementV(p.s("justify"), gap), horizontalAlignment = oneHorizontal(align)) {
             val stretch = align.isEmpty() || align == "stretch"
