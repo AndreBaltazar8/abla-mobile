@@ -250,3 +250,21 @@ PaperMono is parked and explicitly excluded from this active-target check.
 The native guard and its filesystem fixtures are written in Abla. Native build
 entry points compile it with the selected compiler; the Android configuration
 suite also runs its six assertions. No interpreter is needed for these checks.
+
+### Secure input keyboard policy
+
+All three Android input renderers (One, declarative inputs and styled form
+inputs) explicitly disable autocorrection and capitalization for secure fields.
+They keep the existing keyboard kind and submit action; ordinary fields retain
+their configured/default editing policy. Password keyboard variation suppresses
+suggestions; visual masking alone is not the keyboard policy.
+
+`InputKeyboardPolicyTest` covers inherited and unspecified correction, explicit
+capitalization, keyboard/action preservation and ordinary-input isolation. Its
+matched negative runs the same renderer call sites through the old identity
+policy: the two correction/capitalization tests must fail.
+
+Renderer audit: this library has no iOS/Swift host. One's separate web backend
+emits `type="password"`, but has no explicit autocorrect, autocapitalize or
+spellcheck attributes; this Android change makes no browser behavior claim.
+Other canvas/embedded renderers do not use this Compose keyboard policy.
