@@ -1,0 +1,66 @@
+name: iOS host contracts
+on:
+  push:
+    branches: [feat/ios-host]
+    paths:
+      - runtime/ios-host/**
+      - runtime/native/abla_mobile_ios_abi.c
+      - .github/workflows/ios-host.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-host-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  model-and-abi:
+    name: macOS model tests and iOS ABI slices
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
+        with:
+          version: 0.2.45
+      - name: Record exact host/tool versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ios-host-evidence"
+          {
+            git rev-parse HEAD
+            sw_vers
+            uname -m
+            xcodebuild -version
+            swift --version
+            ablac --version
+          } | tee "$RUNNER_TEMP/ios-host-evidence/versions.txt"
+      - name: Test bounded tree and editor contracts on macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --package-path runtime/ios-host --scratch-path "$RUNNER_TEMP/ios-model-build" \
+            2>&1 | tee "$RUNNER_TEMP/ios-host-evidence/model-tests.log"
+      - name: Compile mobile-owned ABI support for both iOS platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pair in 'iphoneos arm64-apple-ios17.0' 'iphonesimulator arm64-apple-ios17.0-simulator'; do
+            read -r sdk target <<< "$pair"
+            root=$(xcrun --sdk "$sdk" --show-sdk-path)
+            object="$RUNNER_TEMP/ios-host-evidence/ios-abi-$sdk.o"
+            xcrun --sdk "$sdk" clang -target "$target" -isysroot "$root" \
+              -std=c11 -Wall -Wextra -Werror -c runtime/native/abla_mobile_ios_abi.c -o "$object"
+            file "$object"
+            xcrun vtool -show-build "$object"
+            nm -gU "$object" | grep '_abla_mobile_ios_abi_version'
+          done
+      - name: Retain contract evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios-host-contract-evidence
+          path: ${{ runner.temp }}/ios-host-evidence
+          retention-days: 14
