@@ -608,7 +608,7 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
             keyboardType = if (number) KeyboardType.Number else if (decimal) KeyboardType.Decimal else if (p.a("secure") == "true") KeyboardType.Password
                 else if (p.a("keyboard") == "email") KeyboardType.Email else KeyboardType.Text,
             imeAction = if (submit > 0) ImeAction.Done else ImeAction.Default,
-        ),
+        ).withSecureInputPolicy(p.a("secure") == "true"),
         keyboardActions = KeyboardActions(onDone = {
             if (submit > 0) {
                 keyboard?.hide()
