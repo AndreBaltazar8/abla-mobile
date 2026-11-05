@@ -433,11 +433,11 @@ private fun RenderTextField(tree: UiTree, node: UiNode, modifier: Modifier) {
         maxLines = if (node.bool("multiline")) 4 else 1,
         visualTransformation = if (node.bool("secure"))
             PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = if (node.bool("secure"))
+        keyboardOptions = (if (node.bool("secure"))
             KeyboardOptions(keyboardType = KeyboardType.Password)
         else if (node.text("keyboard") == "number") KeyboardOptions(keyboardType = KeyboardType.Number)
         else if (node.text("keyboard") == "email") KeyboardOptions(keyboardType = KeyboardType.Email)
-        else KeyboardOptions.Default,
+        else KeyboardOptions.Default).withSecureInputPolicy(node.bool("secure")),
         modifier = modifier.fillMaxWidth().onFocusChanged {
             focused = it.isFocused
         },
@@ -1006,7 +1006,7 @@ private fun RenderInput(tree: UiTree, node: UiNode, modifier: Modifier) {
         keyboardOptions = KeyboardOptions(
             keyboardType = if(code) KeyboardType.Number else if(node.bool("secure")) KeyboardType.Password else if(node.text("keyboard")=="email") KeyboardType.Email else KeyboardType.Text,
             imeAction = if(node.long("submitEvent")>0) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default,
-        ),
+        ).withSecureInputPolicy(node.bool("secure")),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
             if(node.long("submitEvent")>0) {
                 controller?.hide()
