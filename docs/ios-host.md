@@ -3,18 +3,32 @@
 This feature branch contains a SwiftUI host for protocol v1. It is not an iOS
 release, an App Store submission, or proof on a physical device. Android-only
 callers retain the existing entry point; iOS build helpers are explicit package
-submodules and need the compiler release containing the iOS target APIs.
+submodules and require ablac0.2.47 or newer.
 
 ## Build boundary
 
-`import "abla-mobile/ios_slices"` exposes
+Package consumers use an explicit revision-pinned provider, for example:
+
+```abla
+compile fun mobileSource(): ImportSource = gitImportSource(
+    "abla-mobile", "https://github.com/AndreBaltazar8/abla-mobile.git", "rev",
+    "65555622d38f8db8a614b512126db07da0dddc9e")
+import importSubpath(mobileSource(), "ios_slices")
+```
+
+The revision above is an implementation-preview feature commit, not a stable
+release. A bare `import "abla-mobile/ios_slices"` is an importer-relative path;
+it does not resolve a named package automatically. All providers requesting
+`abla-mobile` in one graph must use the same source and revision.
+
+The `ios_slices` subpath exposes
 `mobileBuildIosSlices(name, entry, outputDirectory, fast = true, cache = true)`.
 It registers both targets and stages two static-library builds:
 
 - `ios-arm64/libabla_app.a`: device, minimum iOS17.
 - `ios-arm64-simulator/libabla_app.a`: arm64 Simulator, minimum iOS17.
 
-`import "abla-mobile/ios_build"` additionally exposes
+The `ios_build` subpath additionally exposes
 `mobileIosConfiguration(name, entry, outputDirectory, headersDirectory)` and
 `mobileBuildIos(configuration)`. The default configuration requests fast,
 cached builds and `AblaApp.xcframework` packaging. The compiler packages only
@@ -28,7 +42,7 @@ separate evaluated globals. SDK overrides are `ABLA_APPLE_SDK_IPHONEOS` and
 `ABLA_APPLE_SDK_IPHONESIMULATOR`. Each object, including the Darwin adapter,
 must target the matching iOS platform; a macOS object is not an iOS substitute.
 
-An application imports `abla-mobile/ios_runtime` to export its protocol query,
+An application imports the `ios_runtime` subpath to export its protocol query,
 and exports its long-lived entry as `abla_mobile_run`. See
 `tests/native/mobile_loop_ios.ab` and One's `tests/ios_backend_exports.ab`.
 Use `runtime/ios-host/AppHeaders` as the application archive headers directory.
@@ -117,6 +131,30 @@ See Apple's [fileImporter cancellation API](https://developer.apple.com/document
 and [Keychain entitlement diagnosis](https://developer.apple.com/documentation/security/errsecmissingentitlement).
 The fixture identity is local to the disposable Simulator. It supplies no Apple
 developer team or device provisioning profile.
+
+Released ablac0.2.47 acceptance is recorded separately:
+
+- [42156991980](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42156991980)
+  passes ordinary and secure single-line byte replacement, route fencing,
+  Keychain/picker, both local HTTPS cases and missing-entitlement refusal.
+  The HTTPS fixture uses a fresh trusted Simulator plus independent peer
+  liveness checks; host trust, deadlines and no-replay behavior are unchanged.
+- [42159504541](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42159504541)
+  passes the actual One application:44 One contracts, device/Simulator archives,
+  exact two-slice xcframework/headers/module maps/Swift import, and three UI
+  journeys including ordinary and secure NFC-to-NFD replacement. Inputs are
+  Mobile65555622 and One3ee4793b. The fake producer is excluded from this app.
+
+The ordinary-field control42155531277 remains failed: its NFC replacement
+arrived, but NFD did not. This prompted the common byte-exact single-line UIKit
+editor. A prior services rerun42153788841 timed out before any HTTP request
+reached the local peer and remains failed; it is not relabelled by later passes.
+The multiline control
+[42159655067](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42159655067)
+failed specifically at NFD after NFC/newline bytes arrived; the other five
+ordinary journeys passed. Candidate b167a852 uses a byte-aware UITextView,
+retains actual newlines and bounds the visible height with native scrolling.
+Its unchanged assertion/deadline is under test, with no acceptance claim yet.
 
 Simulator memory and successful archive linkage do not establish physical
 iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
