@@ -92,6 +92,29 @@ implemented. Unsupported services/components refuse visibly. Platform-service
 journeys are a separate CI gate; source compilation does not establish them.
 No ordinary input is implicitly persisted in Keychain or editor recovery.
 
+### Renderer coverage at this checkpoint
+
+This is a source inventory, not a claim that every row has an end-to-end test.
+The implementation lives in [OneRenderer.swift](../runtime/ios-host/Sources/AblaMobileHost/OneRenderer.swift)
+and [OneDecoration.swift](../runtime/ios-host/Sources/AblaMobileHost/OneDecoration.swift).
+
+| Contract | Current implementation and remaining gate |
+| --- | --- |
+| Columns/rows/stacks, vertical/horizontal scroll | Native SwiftUI containers with stable byte-based keys; layout/keyboard/rotation parity needs dedicated journeys. |
+| Feed | Bounded decoded tree rendered eagerly; lazy paging/scroll-position parity remains open. |
+| Text, spacer, divider | Basic native rendering; rich spans, icons, images and bitmaps refuse as unsupported. |
+| Pressable/link | Native enabled state, revision-bound action, pressed decoration; actual disabled-state journey passes. |
+| Input | Secure and ordinary single-line UIKit byte identity accepted; multiline replacement/typing is a separate gate. Secure multiline refuses explicitly. |
+| Styling | Padding, bounded dimensions, fill, colors, borders/radius, opacity and pressed/focused/disabled/selected colors; not a full Compose-style implementation. |
+| Navigation | Application route-entry changes rebuild presentation identity and clear pending edits. Native back-stack/gesture mapping still needs an explicit contract and journey. |
+| Native fallback | Last portable child is rendered when supplied; game/WebView/media adapters are not implemented. |
+| Popover/accessibility | Popover is unsupported; leaf identifiers and native field/button semantics exist, but VoiceOver order/actions and complete dynamic-type parity need their own acceptance. |
+
+Before a stable iOS release, validate composition/paste/selection, multiline
+typing, keyboard avoidance/rotation, native navigation/back and lifecycle
+transitions on the actual application. Simulator success does not replace
+physical-device memory, provisioning or usability checks.
+
 ## Evidence
 
 - [42143525951](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42143525951):
