@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
         with:
-          version: 0.2.45
+          version: 0.2.46
       - name: Record exact host/tool versions
         shell: bash
         run: |
@@ -56,6 +56,23 @@ jobs:
             file "$object"
             xcrun vtool -show-build "$object"
             nm -gU "$object" | grep '_abla_mobile_ios_abi_version'
+          done
+      - name: Exercise native bridge with a fake application producer
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime/ios-host/Tests/NativeBridge/run.sh "$RUNNER_TEMP/ios-native-bridge" \
+            2>&1 | tee "$RUNNER_TEMP/ios-host-evidence/native-bridge.log"
+      - name: Compile SwiftUI host for device and simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pair in 'iphoneos arm64-apple-ios17.0' 'iphonesimulator arm64-apple-ios17.0-simulator'; do
+            read -r sdk target <<< "$pair"
+            swift build --package-path runtime/ios-host --target AblaMobileHost \
+              --scratch-path "$RUNNER_TEMP/ios-host-$sdk" --triple "$target" \
+              --sdk "$(xcrun --sdk "$sdk" --show-sdk-path)" \
+              2>&1 | tee "$RUNNER_TEMP/ios-host-evidence/swiftui-$sdk.log"
           done
       - name: Retain contract evidence
         if: always()

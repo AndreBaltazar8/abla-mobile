@@ -3,6 +3,12 @@ import XCTest
 @testable import AblaMobileModel
 
 final class OneTreeTests: XCTestCase {
+    func testTextNumbersCannotSupplyNonFiniteLayoutValues() throws {
+        for raw in ["nan", "inf", "-inf", "1e999"] {
+            let tree = try OneTree.decode(wire(node(properties: ["gap": raw])))
+            XCTAssertEqual(tree.root.number("gap", default: 8), 8)
+        }
+    }
     private func node(_ key: String = "root", type: String = "one.column",
                       properties: [String: Any] = [:], children: [[String: Any]] = []) -> [String: Any] {
         ["type": type, "key": key, "properties": properties, "children": children]

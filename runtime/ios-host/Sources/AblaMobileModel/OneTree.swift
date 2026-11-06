@@ -34,7 +34,8 @@ public struct OneNode: Equatable, Sendable, Identifiable, CustomStringConvertibl
         value("a." + name, default: fallback)
     }
     public func number(_ name: String, default fallback: Double = 0) -> Double {
-        Double(value(name)) ?? fallback
+        guard let number = Double(value(name)), number.isFinite else { return fallback }
+        return number
     }
     public func event(_ name: String) -> Int64 {
         let value = Int64(attribute(name)) ?? 0
