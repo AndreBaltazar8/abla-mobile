@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 extern int64_t abla_mobile_host_call(int64_t);
+extern int64_t abla_mobile_http_request(const char *, const char *, const char *);
 static int publish(const char *text) {
     if (abla_mobile_host_call(1) < 0) return 0;
     for (const unsigned char *at = (const unsigned char *)text; *at; at++)
@@ -14,6 +15,7 @@ int64_t abla_mobile_run(void) {
     char value[64] = {0}, tree[4096];
     const char *status = "ready";
     int64_t revision = 0;
+    if (abla_mobile_http_request("TIMER", "100", "") <= 0) return 0;
     for (;;) {
         revision++;
         const int size = snprintf(tree, sizeof(tree),
@@ -35,6 +37,7 @@ int64_t abla_mobile_run(void) {
             if (index < 63 && byte >= 32 && byte <= 126 && byte != '"' && byte != '\\') payload[index] = (char)byte;
         }
         if (from <= 0 || from > revision) continue;
+        if (event == -2) status = "timer_ready";
         if (event == 4 && bytes < 64) { memcpy(value, payload, sizeof(value)); status = "editing"; }
         if (event == 7) {
             status = strcmp(value, "s3crEt") == 0 ? "accepted_exact" : "refused";

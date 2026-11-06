@@ -6,6 +6,7 @@ import XCTest
         app.launch()
         let field = app.secureTextFields["secure"]
         XCTAssertTrue(field.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 5))
         XCTAssertTrue(field.isEnabled)
         let blocked = app.buttons["blocked"]
         XCTAssertTrue(blocked.exists)

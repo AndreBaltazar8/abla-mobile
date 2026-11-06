@@ -27,7 +27,8 @@ int64_t abla_ios_tree_copy_v1(int64_t after_sequence, uint8_t *destination,
  * replace only the newest matching queued event, preserving action order. */
 int64_t abla_ios_event_v1(int64_t revision, int64_t identifier,
                          const uint8_t *payload, int64_t size, int64_t change);
-/* Host-created request completions use reserved event -2, revision0. */
+/* Host-created request completions use reserved event -2, revision1, matching
+ * Android/mobileRun's revision-independent completion dispatch. */
 int64_t abla_ios_completion_v1(const uint8_t *payload, int64_t size);
 /* kind1=fire-and-forget effect, kind2=result-bearing request. Peek does not pop;
  * copy/pop requires the same sequence and sufficient capacities for all parts. */

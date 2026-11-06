@@ -15,10 +15,17 @@ public struct AblaMobileRoot: View {
                     OneNodeView(node: tree.root, revision: tree.revision, store: store)
                         .navigationTitle(tree.showTopBar ? tree.title : "")
                         .preferredColorScheme(tree.darkTheme ? .dark : .light)
+                        .safeAreaInset(edge: .bottom) {
+                            if let notice = store.notice { Text(notice).accessibilityIdentifier("runtime.notice") }
+                        }
                 }
             } else { ProgressView().accessibilityIdentifier("runtime.loading") }
         }
         .onAppear { store.start() }
+        .fileImporter(isPresented: Binding(get: { store.pickingFile }, set: { store.setFilePickerPresented($0) }),
+                      allowedContentTypes: store.fileTypes, allowsMultipleSelection: store.multipleFiles) {
+            store.filesPicked($0)
+        }
         // A scene background transition is not process shutdown. The app host
         // explicitly calls stop only when it intends to end this runtime.
     }
@@ -32,7 +39,9 @@ public struct AblaMobileRoot: View {
     private var children: some View {
         ForEach(node.children) { child in AnyView(OneNodeView(node: child, revision: revision, store: store)) }
     }
-    var body: some View { content.accessibilityIdentifier(node.key) }
+    // Container identifiers propagate to descendants in SwiftUI and would
+    // replace every editor/button's own key. Assign identity on controls only.
+    var body: some View { content }
     @ViewBuilder private var content: some View {
         switch node.type {
         case "one.column", "column", "theme", "surface", "card":
@@ -44,12 +53,14 @@ public struct AblaMobileRoot: View {
         case "one.text", "text":
             Text(node.attribute("text", default: node.value("text")))
                 .font(.system(size: CGFloat(max(8, min(96, node.number("fontSize", default: 16))))))
+                .accessibilityIdentifier(node.key)
         case "one.pressable", "one.link", "button":
             Button { _ = store.send(node.event("onPress"), revision: revision) } label: {
                 if node.children.isEmpty { Text(node.attribute("text", default: node.value("text"))) }
                 else { VStack(spacing: gap) { children } }
             }.disabled(node.attribute("enabled") == "false" || node.event("onPress") == 0)
-        case "one.input": OneInputView(node: node, revision: revision, store: store).id(node.key)
+                .accessibilityIdentifier(node.key)
+        case "one.input": OneInputView(node: node, revision: revision, store: store).id(node.key).accessibilityIdentifier(node.key)
         case "one.spacer", "spacer": Spacer(minLength: 0)
         case "one.divider", "divider": Divider()
         case "one.native":

@@ -10,6 +10,7 @@ extern int64_t abla_mobile_host_call(int64_t);
 extern int64_t abla_mobile_platform_effect(int64_t, const char *);
 extern int64_t abla_mobile_http_request(const char *, const char *, const char *);
 static _Atomic int stage;
+static int bad_frame;
 static void pause_briefly(void) { struct timespec wait = {0, 1000000}; nanosleep(&wait, NULL); }
 static void await_stage(int wanted) {
     for (int attempt = 0; attempt < 5000 && atomic_load(&stage) < wanted; attempt++) pause_briefly();
@@ -18,6 +19,7 @@ static void await_stage(int wanted) {
 /* A fake application producer exercises the actual bridge/support queues. This
  * deliberately does not claim to execute the compiler's Abla runtime. */
 int64_t abla_mobile_run(void) {
+    if (bad_frame) { assert(abla_mobile_host_call(ABLA_MOBILE_TREE_END) == -1); return 0; }
     assert(abla_mobile_platform_effect(2, "ação") == 1);
     assert(abla_mobile_http_request("POST", "https://example.invalid/rpc", "{\"x\":1}") == 1);
     assert(abla_mobile_host_call(ABLA_MOBILE_TREE_BEGIN) == 0);
@@ -39,11 +41,23 @@ int64_t abla_mobile_run(void) {
     assert(abla_mobile_host_call(ABLA_MOBILE_EVENT_PAYLOAD_BYTE) == 'z');
     /* Queue depth is bounded: exactly 64 accepted events were filled by UI. */
     for (int i = 0; i < 64; i++) assert(abla_mobile_host_call(ABLA_MOBILE_WAIT_EVENT) == 9);
+    assert(abla_mobile_host_call(ABLA_MOBILE_WAIT_EVENT) == -2);
+    assert(abla_mobile_host_call(ABLA_MOBILE_EVENT_REVISION) == 1);
+    assert(abla_mobile_host_call(ABLA_MOBILE_EVENT_PAYLOAD_SIZE) == 4);
     atomic_store(&stage, 3);
     assert(abla_mobile_host_call(ABLA_MOBILE_WAIT_EVENT) == 0);
     return 0;
 }
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    if (argc > 1) {
+        bad_frame = 1;
+        assert(abla_ios_start_v1() == 1);
+        for (int i = 0; i < 5000 && abla_ios_state_v1() != ABLA_IOS_FAILED; i++) pause_briefly();
+        assert(abla_ios_state_v1() == ABLA_IOS_FAILED && abla_ios_failure_v1() == 2);
+        puts("PASS native bridge: unframed publication fails closed without raw diagnostics");
+        return 0;
+    }
     assert(abla_ios_event_v1(1, 7, NULL, 0, 0) == -2);
     assert(abla_ios_event_v1(0, 7, NULL, 0, 0) == -1);
     assert(abla_ios_start_v1() == 1);
@@ -82,6 +96,12 @@ int main(void) {
         }
         assert(accepted == 1);
     }
+    int64_t completion = 0;
+    for (int i = 0; i < 5000 && !completion; i++) {
+        completion = abla_ios_completion_v1((const unsigned char *)"done", 4);
+        if (!completion) pause_briefly();
+    }
+    assert(completion == 1);
     await_stage(3);
     abla_ios_shutdown_v1();
     for (int i = 0; i < 5000 && abla_ios_state_v1() == ABLA_IOS_STOPPING; i++) pause_briefly();

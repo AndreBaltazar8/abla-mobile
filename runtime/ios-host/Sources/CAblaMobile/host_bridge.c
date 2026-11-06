@@ -87,7 +87,9 @@ int64_t abla_ios_event_v1(int64_t revision, int64_t identifier,
     return queue_event(revision, identifier, payload, size, change == 1);
 }
 int64_t abla_ios_completion_v1(const uint8_t *payload, int64_t size) {
-    return queue_event(0, -2, payload, size, false);
+    /* Matches Android's revision-independent completion envelope. Revision1 is
+     * valid in mobileRun; zero would be rejected before dispatch. */
+    return queue_event(1, -2, payload, size, false);
 }
 /* Called only on the serialized runtime thread. It copies each platform-owned
  * record before popping it. No Abla pointers or Swift objects cross the queue. */
