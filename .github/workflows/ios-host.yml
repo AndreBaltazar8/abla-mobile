@@ -146,10 +146,15 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HostSmoke.xcresult" \
             -skip-testing:HostSmokeUITests/HostSmokeUITests/testHttpsRefusesUnknownCertificateAuthority \
             -skip-testing:HostSmokeUITests/HostSmokeUITests/testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay \
-            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
           result=${PIPESTATUS[0]}
           set -e
+          codesign --display --entitlements :- \
+            "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app" \
+            > "$RUNNER_TEMP/ios-ui-evidence/simulator-entitlements.plist" \
+            2> "$RUNNER_TEMP/ios-ui-evidence/simulator-signature.txt"
+          test "$(plutil -extract application-identifier raw -o - "$RUNNER_TEMP/ios-ui-evidence/simulator-entitlements.plist")" = org.abla.host-smoke
           if test "$result" -eq 0; then
             for mode in untrusted trusted; do
               if test "$mode" = untrusted; then
@@ -166,7 +171,7 @@ jobs:
                 -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-smoke-build" \
                 -only-testing:"HostSmokeUITests/HostSmokeUITests/$testCase" \
                 -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HTTPS-$mode.xcresult" \
-                CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+                CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
                 2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/https-$mode.log"
               result=${PIPESTATUS[0]}
               set -e

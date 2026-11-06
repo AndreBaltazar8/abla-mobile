@@ -6,7 +6,14 @@ import XCTest
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
         app.buttons["pick"].tap()
         let cancel = app.buttons["Cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        // The preserved first run shows the cold system DocumentManager
+        // service taking16s to attach. This is an OS presentation budget,
+        // with one tap and no application retry or network-clock change.
+        guard cancel.waitForExistence(timeout: 30) else {
+            let phase = app.staticTexts["status"].label
+            XCTFail("system picker did not present; fixed phase: \(phase)")
+            return
+        }
         cancel.tap()
         XCTAssertTrue(app.staticTexts["picker_cancel_passed"].waitForExistence(timeout: 5))
     }
@@ -31,7 +38,9 @@ import XCTest
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
         app.buttons["keychain"].tap()
-        XCTAssertTrue(app.staticTexts["keychain_roundtrip_passed"].waitForExistence(timeout: 10))
+        let done = app.staticTexts["keychain_roundtrip_passed"].waitForExistence(timeout: 10)
+        let phase = app.staticTexts["status"].label
+        XCTAssertTrue(done, "fixed fixture phase: \(phase)")
         XCTAssertFalse(app.staticTexts["runtime.failure"].exists)
     }
     func testApplicationReplacementPreservesExactUnicodeBytes() {

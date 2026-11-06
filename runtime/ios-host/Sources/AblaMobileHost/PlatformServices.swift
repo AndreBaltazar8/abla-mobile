@@ -196,7 +196,7 @@ import AblaMobileModel
         } else if method == "STOREDEL" {
             let result = SecItemDelete(query as CFDictionary)
             finish(id, status: result == errSecSuccess || result == errSecItemNotFound ? 204 : 0,
-                   error: result == errSecSuccess || result == errSecItemNotFound ? "" : "secure_delete_failed")
+                   error: result == errSecSuccess || result == errSecItemNotFound ? "" : secureError(result, fallback: "secure_delete_failed"))
         } else {
             guard String(data: body, encoding: .utf8) != nil else { finish(id, error: "invalid_secure_value"); return }
             let attributes: [String: Any] = [kSecValueData as String: body]
@@ -207,8 +207,15 @@ import AblaMobileModel
                 item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
                 result = SecItemAdd(item as CFDictionary, nil)
             }
-            finish(id, status: result == errSecSuccess ? 204 : 0, error: result == errSecSuccess ? "" : "secure_write_failed")
+            finish(id, status: result == errSecSuccess ? 204 : 0, error: result == errSecSuccess ? "" : secureError(result, fallback: "secure_write_failed"))
         }
+    }
+    private func secureError(_ status: OSStatus, fallback: String) -> String {
+        // Fixed capability errors, never Security's potentially sensitive
+        // human-readable description or the queried account/value.
+        if status == errSecMissingEntitlement { return "secure_entitlement_missing" }
+        if status == errSecInteractionNotAllowed { return "secure_locked" }
+        return fallback
     }
     private func finish(_ id: Int64, status: Int = 0, body: String = "", error: String = "", headers: [String: String] = [:], extras: [String: Any] = [:]) {
         guard !stopped, retained.contains(id) else { return }

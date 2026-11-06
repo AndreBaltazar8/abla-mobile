@@ -81,7 +81,8 @@ int64_t abla_mobile_run(void) {
         if (event == -2 && secure_phase && number_field(payload, "\"requestId\"") == secure_request) {
             const int64_t code = number_field(payload, "\"status\"");
             if ((secure_phase == 1 || secure_phase == 2 || secure_phase == 4) && code != 204) {
-                status = "keychain_refused"; secure_phase = 0;
+                status = strstr(payload, "secure_entitlement_missing") ? "keychain_needs_entitlement" : "keychain_refused";
+                secure_phase = 0;
             } else if (secure_phase == 3 && (code != 200 || !strstr(payload, "\"body\":\"fixture-only-value\""))) {
                 status = "keychain_wrong_value"; secure_phase = 0;
             } else if (secure_phase == 5) {
