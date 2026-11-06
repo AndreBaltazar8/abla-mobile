@@ -1,0 +1,4 @@
+// Adds the application-owned version query without changing the generic
+// Android/native-loop fixture or asking the compiler for a mobile intrinsic.
+import "../../src/ios_runtime.ab"
+import "mobile_loop.ab"

@@ -16,6 +16,7 @@ public struct AblaMobileRoot: View {
                     ZStack {
                         (OneRGBA(tree.background)?.swiftColor ?? Color(uiColor: .systemBackground)).ignoresSafeArea()
                         OneNodeView(node: tree.root, revision: tree.revision, store: store)
+                            .id(tree.presentationIdentity)
                     }
                         .navigationTitle(tree.showTopBar ? tree.title : "")
                         .preferredColorScheme(tree.darkTheme ? .dark : .light)

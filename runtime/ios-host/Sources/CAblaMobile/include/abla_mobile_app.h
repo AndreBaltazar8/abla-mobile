@@ -13,6 +13,8 @@ extern "C" {
 
 typedef int64_t (*AblaMobileHostCall)(void *host_context, int64_t value);
 int64_t abla_mobile_run(void);
+/* Exported from src/ios_runtime.ab by the application, not supplied by host C. */
+int64_t abla_mobile_application_protocol_version(void);
 int64_t abla_mobile_run_checked(void);
 int64_t abla_mobile_failure_size(void);
 int64_t abla_mobile_failure_byte(int64_t index);

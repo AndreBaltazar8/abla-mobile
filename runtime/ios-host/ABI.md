@@ -40,3 +40,10 @@ interrupt a stuck application computation and does not permit runtime restart.
 C bridge and existing support objects. It proves transport boundaries without
 claiming an Abla runtime or Simulator UI execution. SwiftUI target compilation
 and a real Abla-linked Simulator journey are separate gates.
+
+Every iOS application entry imports `src/ios_runtime.ab` (the One iOS backend
+does so). It exports `abla_mobile_application_protocol_version` **from the
+application archive**. A missing query is a link failure; a mismatched version
+is refused before the runtime starts. The separate host-owned iOS ABI marker
+does not substitute for this application query. The iOS loop build fixture is
+`tests/native/mobile_loop_ios.ab`, which adds it to the generic loop fixture.

@@ -1,0 +1,8 @@
+import "abla/build"
+
+// Application-owned protocol query, included in the application's archive.
+// The C host's own marker alone cannot detect a mismatched application library.
+fun mobileIosApplicationProtocolVersion(): int = 1
+val mobileIosApplicationProtocolExported = #exportFunction(
+    "mobileIosApplicationProtocolVersion", "abla_mobile_application_protocol_version"
+)

@@ -3,6 +3,13 @@ import XCTest
 @testable import AblaMobileModel
 
 final class OneTreeTests: XCTestCase {
+    func testRouteIdentityChangesButOrdinaryRevisionDoesNotResetEditors() throws {
+        let first = try OneTree.decode(wire(node(properties: ["a.one.entry": "1"])))
+        let echo = try OneTree.decode(wire(node(properties: ["a.one.entry": "1"]), revision: 2))
+        let moved = try OneTree.decode(wire(node(properties: ["a.one.entry": "2"]), revision: 3))
+        XCTAssertEqual(first.presentationIdentity, echo.presentationIdentity)
+        XCTAssertNotEqual(first.presentationIdentity, moved.presentationIdentity)
+    }
     func testTextNumbersCannotSupplyNonFiniteLayoutValues() throws {
         for raw in ["nan", "inf", "-inf", "1e999"] {
             let tree = try OneTree.decode(wire(node(properties: ["gap": raw])))

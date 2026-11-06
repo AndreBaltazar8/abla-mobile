@@ -50,6 +50,11 @@ public struct OneTree: Equatable, Sendable, CustomStringConvertible {
     public let showTopBar: Bool
     public let background: String
     public let root: OneNode
+    /// New route entries/root keys reset ephemeral editor state. This identity
+    /// is deliberately independent of revision, so ordinary echoes keep focus.
+    public var presentationIdentity: String {
+        "\(root.key.utf8.count):\(root.key)|\(root.attribute("one.entry"))"
+    }
     public var description: String { "OneTree(revision: \(revision), content: redacted)" }
 
     public static func decode(_ data: Data) throws -> OneTree {

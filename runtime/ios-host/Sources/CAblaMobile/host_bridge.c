@@ -244,7 +244,8 @@ static void *runtime_thread(void *unused) {
     return NULL;
 }
 int64_t abla_ios_start_v1(void) {
-    if (abla_mobile_ios_abi_version() != ABLA_MOBILE_IOS_ABI_VERSION) return -1;
+    if (abla_mobile_ios_abi_version() != ABLA_MOBILE_IOS_ABI_VERSION ||
+        abla_mobile_application_protocol_version() != ABLA_MOBILE_PROTOCOL_VERSION) return -1;
     pthread_mutex_lock(&host.mutex);
     if (host.started || atomic_load(&host.closing)) { pthread_mutex_unlock(&host.mutex); return 0; }
     host.started = true;

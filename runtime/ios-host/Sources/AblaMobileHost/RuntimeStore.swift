@@ -23,7 +23,10 @@ import CAblaMobile
     public init() {}
     public func start() {
         guard polling == nil else { return }
-        guard abla_ios_start_v1() >= 0 else { failure = "runtime_start_refused"; return }
+        let started = abla_ios_start_v1()
+        guard started == 1 || (started == 0 && abla_ios_state_v1() == Int64(ABLA_IOS_RUNNING.rawValue)) else {
+            failure = "runtime_start_refused"; return
+        }
         services = IosPlatformServices(deliver: { data in
             data.withUnsafeBytes {
                 abla_ios_completion_v1($0.bindMemory(to: UInt8.self).baseAddress, Int64($0.count)) == 1
@@ -67,24 +70,34 @@ import CAblaMobile
         }
     }
     private func readSnapshot() {
+        guard failure == nil else { return }
         if abla_ios_state_v1() == Int64(ABLA_IOS_FAILED.rawValue) {
-            failure = "runtime_failed_\(abla_ios_failure_v1())"; tree = nil; return
+            fail("runtime_failed_\(abla_ios_failure_v1())"); return
         }
         services?.flush()
         drainMessages()
+        guard failure == nil else { return }
         var next: Int64 = sequence
         let count = buffer.withUnsafeMutableBufferPointer {
             abla_ios_tree_copy_v1(sequence, $0.baseAddress, Int64($0.count), &next)
         }
+        guard count >= 0 else { fail("tree_copy_refused"); return }
         guard count > 0 else { return }
         defer { _ = buffer.withUnsafeMutableBytes { $0.initializeMemory(as: UInt8.self, repeating: 0) } }
         do {
             let decoded = try OneTree.decode(Data(buffer.prefix(Int(count))))
             guard decoded.revision > (tree?.revision ?? 0) else {
-                failure = "tree_revision_refused"; return
+                fail("tree_revision_refused"); return
             }
             tree = decoded; sequence = next
-        } catch { failure = "tree_decode_refused"; tree = nil }
+        } catch { fail("tree_decode_refused") }
+    }
+    private func fail(_ code: String) {
+        failure = code; tree = nil
+        services?.stop(); services = nil
+        pickerCompletion = nil; pickingFile = false
+        polling?.cancel(); polling = nil
+        abla_ios_shutdown_v1()
     }
     private func drainMessages() {
         for _ in 0..<8 {
@@ -93,7 +106,7 @@ import CAblaMobile
             guard abla_ios_message_peek_v1(&message) == 1 else { return }
             guard (0...8).contains(message.method_size), (0...2048).contains(message.url_size),
                   (0...8 * 1024 * 1024).contains(message.body_size) else {
-                failure = "platform_message_refused"; return
+                fail("platform_message_refused"); return
             }
             var method = [UInt8](repeating: 0, count: Int(message.method_size))
             var url = [UInt8](repeating: 0, count: Int(message.url_size))
@@ -106,14 +119,14 @@ import CAblaMobile
                     }
                 }
             }
-            guard result == 1 else { failure = "platform_copy_refused"; return }
+            guard result == 1 else { fail("platform_copy_refused"); return }
             if message.kind == 2 {
                 guard let method = String(bytes: method, encoding: .utf8), let url = String(bytes: url, encoding: .utf8),
                       services?.receive(id: message.identifier, method: method, url: url, body: Data(body)) == true else {
-                    failure = "platform_admission_refused"; return
+                    fail("platform_admission_refused"); return
                 }
             } else if message.kind == 1 {
-                guard let text = String(bytes: body, encoding: .utf8) else { failure = "effect_decode_refused"; return }
+                guard let text = String(bytes: body, encoding: .utf8) else { fail("effect_decode_refused"); return }
                 switch message.identifier {
                 case 1: notice = text
                 case 2: UIPasteboard.general.string = text
@@ -124,7 +137,7 @@ import CAblaMobile
                 case 4: UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 default: notice = "unsupported_effect_\(message.identifier)"
                 }
-            } else { failure = "platform_kind_refused"; return }
+            } else { fail("platform_kind_refused"); return }
         }
     }
 }

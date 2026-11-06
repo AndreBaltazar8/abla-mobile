@@ -1,6 +1,22 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    func testNewRouteCannotRetainUnacknowledgedSecureEdit() {
+        let app = XCUIApplication(); app.launch()
+        let field = app.secureTextFields["secure"]
+        XCTAssertTrue(field.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 5))
+        app.buttons["ignore"].tap()
+        XCTAssertTrue(app.staticTexts["ignore_mode"].waitForExistence(timeout: 5))
+        field.tap(); field.typeText("routeSecret")
+        XCTAssertTrue(app.staticTexts["editing"].waitForExistence(timeout: 5))
+        let pending = field.value as? String ?? ""
+        XCTAssertTrue(!pending.isEmpty && pending != field.placeholderValue)
+        app.buttons["route"].tap()
+        XCTAssertTrue(app.staticTexts["new_route"].waitForExistence(timeout: 5))
+        let cleared = app.secureTextFields["secure"].value as? String ?? ""
+        XCTAssertTrue(cleared.isEmpty || cleared == field.placeholderValue)
+    }
     func testSecureEditingExactActionAndNativeDisabledState() {
         let app = XCUIApplication()
         app.launch()

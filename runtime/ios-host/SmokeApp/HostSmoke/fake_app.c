@@ -5,6 +5,7 @@
 #include <string.h>
 extern int64_t abla_mobile_host_call(int64_t);
 extern int64_t abla_mobile_http_request(const char *, const char *, const char *);
+int64_t abla_mobile_application_protocol_version(void) { return 1; }
 static int publish(const char *text) {
     if (abla_mobile_host_call(1) < 0) return 0;
     for (const unsigned char *at = (const unsigned char *)text; *at; at++)
@@ -15,17 +16,21 @@ int64_t abla_mobile_run(void) {
     char value[64] = {0}, tree[4096];
     const char *status = "ready";
     int64_t revision = 0;
+    int64_t entry = 1;
+    int ignore = 0;
     if (abla_mobile_http_request("TIMER", "100", "") <= 0) return 0;
     for (;;) {
         revision++;
         const int size = snprintf(tree, sizeof(tree),
             "{\"protocol\":1,\"revision\":%lld,\"darkTheme\":false,\"title\":\"Host fixture\",\"root\":"
-            "{\"type\":\"one.column\",\"key\":\"root\",\"properties\":{},\"children\":["
+            "{\"type\":\"one.column\",\"key\":\"root\",\"properties\":{\"a.one.entry\":\"%lld\"},\"children\":["
             "{\"type\":\"one.input\",\"key\":\"secure\",\"properties\":{\"a.secure\":\"true\",\"a.value\":\"%s\",\"a.placeholder\":\"Fixture password\",\"a.onChange\":\"4\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"accept\",\"properties\":{\"a.onPress\":\"7\",\"a.text\":\"Accept\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"blocked\",\"properties\":{\"a.onPress\":\"9\",\"a.text\":\"Blocked\",\"a.enabled\":\"false\"},\"children\":[]},"
+            "{\"type\":\"one.pressable\",\"key\":\"ignore\",\"properties\":{\"a.onPress\":\"10\",\"a.text\":\"Ignore echoes\"},\"children\":[]},"
+            "{\"type\":\"one.pressable\",\"key\":\"route\",\"properties\":{\"a.onPress\":\"11\",\"a.text\":\"New route\"},\"children\":[]},"
             "{\"type\":\"one.text\",\"key\":\"status\",\"properties\":{\"a.text\":\"%s\"},\"children\":[]}]}}",
-            (long long)revision, value, status);
+            (long long)revision, (long long)entry, value, status);
         if (size <= 0 || size >= (int)sizeof(tree) || !publish(tree)) return 0;
         const int64_t event = abla_mobile_host_call(3);
         if (event == 0) return 0;
@@ -38,12 +43,14 @@ int64_t abla_mobile_run(void) {
         }
         if (from <= 0 || from > revision) continue;
         if (event == -2) status = "timer_ready";
-        if (event == 4 && bytes < 64) { memcpy(value, payload, sizeof(value)); status = "editing"; }
+        if (event == 4 && bytes < 64) { if (!ignore) memcpy(value, payload, sizeof(value)); status = "editing"; }
         if (event == 7) {
             status = strcmp(value, "s3crEt") == 0 ? "accepted_exact" : "refused";
             memset(value, 0, sizeof(value));
         }
         if (event == 9) status = "disabled_button_sent";
+        if (event == 10) { ignore = 1; memset(value, 0, sizeof(value)); status = "ignore_mode"; }
+        if (event == 11) { entry++; ignore = 0; memset(value, 0, sizeof(value)); status = "new_route"; }
         memset(payload, 0, sizeof(payload));
     }
 }
