@@ -1,6 +1,15 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    func testMultilineTypingPreservesNewlineThroughChangeEvent() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        let field = app.textViews["multiline"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText("First\nSecond")
+        XCTAssertTrue(app.staticTexts["multiline_typed"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["runtime.failure"].exists)
+    }
     func testMultilineModelReplacementPreservesExactUnicodeBytes() {
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
