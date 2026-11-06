@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import AblaMobileModel
 
 /// Initial protocol-v1 renderer. Unsupported nodes are visible refusals rather
@@ -12,7 +13,10 @@ public struct AblaMobileRoot: View {
             if store.failure != nil { Text("Application unavailable").accessibilityIdentifier("runtime.failure") }
             else if let tree = store.tree {
                 NavigationStack {
-                    OneNodeView(node: tree.root, revision: tree.revision, store: store)
+                    ZStack {
+                        (OneRGBA(tree.background)?.swiftColor ?? Color(uiColor: .systemBackground)).ignoresSafeArea()
+                        OneNodeView(node: tree.root, revision: tree.revision, store: store)
+                    }
                         .navigationTitle(tree.showTopBar ? tree.title : "")
                         .preferredColorScheme(tree.darkTheme ? .dark : .light)
                         .safeAreaInset(edge: .bottom) {
@@ -90,6 +94,14 @@ public struct AblaMobileRoot: View {
         _echoes = State(initialValue: InputEchoes(initial: initial))
     }
     private var secure: Bool { node.attribute("secure") == "true" }
+    private var keyboard: UIKeyboardType {
+        switch node.attribute("keyboard") {
+        case "number": .numberPad
+        case "decimal": .decimalPad
+        case "email": .emailAddress
+        default: .default
+        }
+    }
     private var model: String { node.attribute("value") }
     private var binding: Binding<String> {
         Binding(get: { editing }, set: { raw in
@@ -122,6 +134,7 @@ public struct AblaMobileRoot: View {
             }
         }
         .focused($focused)
+        .keyboardType(keyboard)
         .modifier(OneDecoration(node: node, focused: focused))
         .disabled(node.attribute("enabled") == "false")
         .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision); focused = false }

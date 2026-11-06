@@ -4,6 +4,7 @@ final class OneEditorValueTests: XCTestCase {
     func testTextPreservesCaseAndUnicodeWithoutCorrection() {
         XCTAssertEqual(OneEditorValue.normalized("s3crEt-ação", keyboard: "text", maximumUTF16: 100), "s3crEt-ação")
         XCTAssertEqual(OneEditorValue.normalized("e\u{301}", keyboard: "text", maximumUTF16: 2), "e\u{301}")
+        XCTAssertEqual(Array(OneEditorValue.normalized("e\u{301}", keyboard: "text", maximumUTF16: 2).utf8), [0x65, 0xcc, 0x81])
         XCTAssertEqual(OneEditorValue.normalized("😀x", keyboard: "text", maximumUTF16: 1), "")
         XCTAssertEqual(OneEditorValue.normalized("😀x", keyboard: "text", maximumUTF16: 2), "😀")
     }

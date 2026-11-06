@@ -15,10 +15,10 @@ struct OneDecoration: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius)
         let background = style.color("background", pressed: pressed, focused: focused)?.swiftColor ?? .clear
         let border = style.color("borderColor", pressed: pressed, focused: focused)?.swiftColor ?? .clear
-        let width = style.dimension("width").map(CGFloat.init)
-        let height = style.dimension("height").map(CGFloat.init)
-        let minWidth = style.dimension("minWidth").map(CGFloat.init)
-        let minHeight = style.dimension("minHeight").map(CGFloat.init)
+        let width = style.dimension("width").map { CGFloat($0) }
+        let height = style.dimension("height").map { CGFloat($0) }
+        let minWidth = style.dimension("minWidth").map { CGFloat($0) }
+        let minHeight = style.dimension("minHeight").map { CGFloat($0) }
         let maxWidth = style.dimension("maxWidth").map { max(CGFloat($0), minWidth ?? 0) }
         let maxHeight = style.dimension("maxHeight").map { max(CGFloat($0), minHeight ?? 0) }
         content
