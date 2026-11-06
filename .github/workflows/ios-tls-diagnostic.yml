@@ -1,0 +1,39 @@
+name: Focused iOS TLS stand-in diagnostics
+on:
+  push:
+    branches: [feat/ios-host]
+    paths: [.github/workflows/ios-tls-diagnostic.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tls-diagnostic:
+    name: Unknown CA and system-trusted local TLS
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Verify unchanged host and fixture inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=715930bd58de130b725ebc6ad879b01aa44ff0d9
+          for path in runtime/ios-host/Sources runtime/ios-host/SmokeApp runtime/ios-host/Tests/https-standin.mjs; do
+            test "$(git rev-parse "$baseline:$path")" = "$(git rev-parse "HEAD:$path")"
+          done
+          mkdir -p "$RUNNER_TEMP/ios-ui-evidence"
+          { git rev-parse HEAD; sw_vers; xcodebuild -version; swift --version; } \
+            > "$RUNNER_TEMP/ios-ui-evidence/versions.txt"
+      - name: Exercise only the two TLS cases without client retries
+        shell: bash
+        run: tools/ios-tls-diagnostic.sh
+      - name: Retain scoped TLS diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios-tls-diagnostic-evidence
+          path: ${{ runner.temp }}/ios-ui-evidence
+          retention-days: 14
