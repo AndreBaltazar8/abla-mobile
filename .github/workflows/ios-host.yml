@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
         with:
-          version: 0.2.46
+          version: 0.2.47
       - name: Record exact host/tool versions
         shell: bash
         run: |

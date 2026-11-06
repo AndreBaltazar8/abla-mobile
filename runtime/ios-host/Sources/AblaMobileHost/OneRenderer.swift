@@ -129,7 +129,7 @@ public struct AblaMobileRoot: View {
             if secure && node.attribute("multiline") == "true" {
                 Text("Secure multiline input is unsupported").accessibilityIdentifier("runtime.secure_multiline_refused")
             } else if secure {
-                ExactSecureEditor(text: binding, placeholder: node.attribute("placeholder"),
+                ExactSingleLineEditor(text: binding, secure: true, placeholder: node.attribute("placeholder"),
                     identifier: node.key, enabled: node.attribute("enabled") != "false", keyboard: keyboard,
                     focusChanged: { focused = $0 },
                     submitted: { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity) })
@@ -137,8 +137,10 @@ public struct AblaMobileRoot: View {
             } else if node.attribute("multiline") == "true" {
                 TextField(node.attribute("placeholder"), text: binding, axis: .vertical)
             } else {
-                TextField(node.attribute("placeholder"), text: binding)
-                    .keyboardType(node.attribute("keyboard") == "email" ? .emailAddress : .default)
+                ExactSingleLineEditor(text: binding, secure: false, placeholder: node.attribute("placeholder"),
+                    identifier: node.key, enabled: node.attribute("enabled") != "false", keyboard: keyboard,
+                    focusChanged: { focused = $0 },
+                    submitted: { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity) })
             }
         }
         .focused($focused)
@@ -165,8 +167,9 @@ public struct AblaMobileRoot: View {
 
 /// UIKit's editor is updated by byte identity. Swift String equality treats
 /// canonically equivalent Unicode strings as equal, while protocol v1 does not.
-@MainActor private struct ExactSecureEditor: UIViewRepresentable {
+@MainActor private struct ExactSingleLineEditor: UIViewRepresentable {
     @Binding var text: String
+    let secure: Bool
     let placeholder: String
     let identifier: String
     let enabled: Bool
@@ -177,12 +180,6 @@ public struct AblaMobileRoot: View {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
-        field.isSecureTextEntry = true
-        field.autocorrectionType = .no
-        field.autocapitalizationType = .none
-        field.spellCheckingType = .no
-        field.smartQuotesType = .no
-        field.smartDashesType = .no
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -190,15 +187,21 @@ public struct AblaMobileRoot: View {
     }
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.parent = self
+        if field.isSecureTextEntry != secure { field.isSecureTextEntry = secure }
+        field.autocorrectionType = secure ? .no : .default
+        field.autocapitalizationType = secure ? .none : .sentences
+        field.spellCheckingType = secure ? .no : .default
+        field.smartQuotesType = secure ? .no : .default
+        field.smartDashesType = secure ? .no : .default
         field.placeholder = placeholder
         field.accessibilityIdentifier = identifier
-        field.isEnabled = enabled
+        field.isEnabled = enabled && context.environment.isEnabled
         field.keyboardType = keyboard
         if !(field.text ?? "").utf8.elementsEqual(text.utf8) { field.text = text }
     }
     final class Coordinator: NSObject, UITextFieldDelegate {
-        var parent: ExactSecureEditor
-        init(_ parent: ExactSecureEditor) { self.parent = parent }
+        var parent: ExactSingleLineEditor
+        init(_ parent: ExactSingleLineEditor) { self.parent = parent }
         @objc func changed(_ field: UITextField) {
             parent.text = field.text ?? ""
             // Apply normalization or a rejected/full event queue immediately.
