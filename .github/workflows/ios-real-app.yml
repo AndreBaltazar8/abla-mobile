@@ -18,13 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 65555622d38f8db8a614b512126db07da0dddc9e
+          ref: b167a852b53728ea26aacf81f850b8a32d60f60f
           path: abla-mobile
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AndreBaltazar8/abla-one
-          ref: 3ee4793b0ceccf96c4cdd48d7159eeec340c2a57
+          ref: 306f7ac8c750b5a9f13bfdbd5a1e80b2f62534ce
           path: abla-one
           persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
@@ -94,6 +94,7 @@ jobs:
             -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-real-build" \
             -resultBundlePath "$RUNNER_TEMP/ios-real-evidence/RealOne.xcresult" \
             -only-testing:HostSmokeUITests/HostSmokeUITests/testApplicationReplacementPreservesExactUnicodeBytes \
+            -only-testing:HostSmokeUITests/HostSmokeUITests/testMultilineModelReplacementPreservesExactUnicodeBytes \
             -only-testing:HostSmokeUITests/HostSmokeUITests/testNewRouteCannotRetainUnacknowledgedSecureEdit \
             -only-testing:HostSmokeUITests/HostSmokeUITests/testSecureEditingExactActionAndNativeDisabledState \
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
