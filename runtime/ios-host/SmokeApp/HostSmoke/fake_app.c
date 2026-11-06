@@ -20,7 +20,7 @@ static int64_t number_field(const char *json, const char *key) {
     return (int64_t)value;
 }
 int64_t abla_mobile_run(void) {
-    char value[64] = {0}, tree[4096];
+    char value[64] = {0}, plain_value[64] = {0}, tree[4096];
     const char *status = "ready";
     int64_t revision = 0;
     int64_t entry = 1;
@@ -37,6 +37,7 @@ int64_t abla_mobile_run(void) {
             "{\"protocol\":1,\"revision\":%lld,\"darkTheme\":false,\"title\":\"Host fixture\",\"root\":"
             "{\"type\":\"one.column\",\"key\":\"root\",\"properties\":{\"a.one.entry\":\"%lld\"},\"children\":["
             "{\"type\":\"one.input\",\"key\":\"secure\",\"properties\":{\"a.secure\":\"true\",\"a.value\":\"%s\",\"a.placeholder\":\"Fixture password\",\"a.onChange\":\"4\"},\"children\":[]},"
+            "{\"type\":\"one.input\",\"key\":\"ordinary\",\"properties\":{\"a.value\":\"%s\",\"a.placeholder\":\"Public fixture text\",\"a.onChange\":\"22\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"accept\",\"properties\":{\"a.onPress\":\"7\",\"a.text\":\"Accept\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"blocked\",\"properties\":{\"a.onPress\":\"9\",\"a.text\":\"Blocked\",\"a.enabled\":\"false\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"ignore\",\"properties\":{\"a.onPress\":\"10\",\"a.text\":\"Ignore echoes\"},\"children\":[]},"
@@ -44,10 +45,11 @@ int64_t abla_mobile_run(void) {
             "{\"type\":\"one.pressable\",\"key\":\"nfc\",\"properties\":{\"a.onPress\":\"15\",\"a.text\":\"Set NFC\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"nfd\",\"properties\":{\"a.onPress\":\"16\",\"a.text\":\"Set NFD\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"keychain\",\"properties\":{\"a.onPress\":\"17\",\"a.text\":\"Check Keychain\"},\"children\":[]},"
+            "{\"type\":\"one.pressable\",\"key\":\"keychain-refusal\",\"properties\":{\"a.onPress\":\"21\",\"a.text\":\"Check unavailable storage\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"https\",\"properties\":{\"a.onPress\":\"18\",\"a.text\":\"Check HTTPS\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"pick\",\"properties\":{\"a.onPress\":\"19\",\"a.text\":\"Pick any file\"},\"children\":[]},"
             "{\"type\":\"one.text\",\"key\":\"status\",\"properties\":{\"a.text\":\"%s\"},\"children\":[]}]}}",
-            (long long)revision, (long long)entry, value, status);
+            (long long)revision, (long long)entry, value, plain_value, status);
         if (size <= 0 || size >= (int)sizeof(tree) || !publish(tree)) return 0;
         const int64_t event = abla_mobile_host_call(3);
         if (event == 0) return 0;
@@ -96,10 +98,11 @@ int64_t abla_mobile_run(void) {
                 if (secure_request <= 0) { secure_phase = 0; status = "keychain_queue_refused"; }
             }
         }
-        if (event == 4 && bytes < 64) {
+        if ((event == 4 || event == 22) && bytes < 64) {
             int safe = 1;
             for (int64_t i = 0; i < bytes; i++) if ((unsigned char)payload[i] < 32 || payload[i] == '"' || payload[i] == '\\') safe = 0;
-            if (!ignore && safe) memcpy(value, payload, sizeof(value)); status = "editing";
+            if (safe && (event == 22 || !ignore)) memcpy(event == 22 ? plain_value : value, payload, sizeof(value));
+            status = "editing";
         }
         if (event == 7) {
             status = strcmp(value, "s3crEt") == 0 ? "accepted_exact" : "refused";
@@ -108,11 +111,16 @@ int64_t abla_mobile_run(void) {
         if (event == 9) status = "disabled_button_sent";
         if (event == 10) { ignore = 1; memset(value, 0, sizeof(value)); status = "ignore_mode"; }
         if (event == 11) { entry++; ignore = 0; memset(value, 0, sizeof(value)); status = "new_route"; }
-        if (event == 15) { strcpy(value, "\xc3\xa9"); status = "unicode_nfc"; }
-        if (event == 16) { strcpy(value, "e\xcc\x81"); status = "unicode_nfd"; }
+        if (event == 15) { strcpy(value, "\xc3\xa9"); strcpy(plain_value, "\xc3\xa9"); status = "unicode_nfc"; }
+        if (event == 16) { strcpy(value, "e\xcc\x81"); strcpy(plain_value, "e\xcc\x81"); status = "unicode_nfd"; }
         if (event == 17 && !secure_phase) {
             secure_phase = 1; status = "keychain_in_progress";
             secure_request = abla_mobile_http_request("STOREDEL", "host-smoke-isolated-key", "");
+            if (secure_request <= 0) { secure_phase = 0; status = "keychain_queue_refused"; }
+        }
+        if (event == 21 && !secure_phase) {
+            secure_phase = 2; status = "keychain_in_progress";
+            secure_request = abla_mobile_http_request("STORESET", "host-smoke-isolated-key", "fixture-only-value");
             if (secure_request <= 0) { secure_phase = 0; status = "keychain_queue_refused"; }
         }
         if (event == 18 && !http_phase) {

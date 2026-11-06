@@ -133,7 +133,16 @@ jobs:
           node runtime/ios-host/Tests/https-standin.mjs "$tls/server.key" "$tls/server.crt" \
             "$RUNNER_TEMP/ios-ui-evidence/https-counts.json" > "$tls/server.log" 2>&1 &
           peer=$!
-          trap 'kill "$peer" 2>/dev/null || true; rm -rf "$tls"' EXIT
+          trustedDevice=''
+          cleanup() {
+            kill "$peer" 2>/dev/null || true
+            if test -n "$trustedDevice"; then
+              xcrun simctl shutdown "$trustedDevice" 2>/dev/null || true
+              xcrun simctl delete "$trustedDevice" 2>/dev/null || true
+            fi
+            rm -rf "$tls"
+          }
+          trap cleanup EXIT
           for attempt in $(seq 1 50); do
             grep -q 'TLS stand-in ready' "$tls/server.log" && break
             kill -0 "$peer"; sleep .1
@@ -146,6 +155,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HostSmoke.xcresult" \
             -skip-testing:HostSmokeUITests/HostSmokeUITests/testHttpsRefusesUnknownCertificateAuthority \
             -skip-testing:HostSmokeUITests/HostSmokeUITests/testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay \
+            -skip-testing:HostSmokeUITests/HostSmokeUITests/testMissingEntitlementRefusesSecureWrite \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
           result=${PIPESTATUS[0]}
@@ -167,7 +177,19 @@ jobs:
               else
                 node -e 'const c=require(process.argv[1]); if(Object.values(c).some(x=>x!==0)) process.exit(1)' \
                   "$RUNNER_TEMP/ios-ui-evidence/https-counts.json"
-                xcrun simctl keychain "$device" add-root-cert "$tls/ca.crt"
+                # A previous unchanged-client run timed out with zero HTTP
+                # requests after the untrusted case. Isolate positive trust
+                # provisioning from that Simulator's connection/trust state.
+                type=$(jq -r --arg id "$device" '.devices[][]|select(.udid==$id)|.deviceTypeIdentifier' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+                runtime=$(jq -r --arg id "$device" '.devices|to_entries[]|select(any(.value[];.udid==$id))|.key' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+                trustedDevice=$(xcrun simctl create "Abla-trusted-$GITHUB_RUN_ID" "$type" "$runtime")
+                xcrun simctl boot "$trustedDevice"
+                xcrun simctl bootstatus "$trustedDevice" -b
+                xcrun simctl keychain "$trustedDevice" add-root-cert "$tls/ca.crt"
+                device=$trustedDevice
+                kill -0 "$peer"
+                curl --fail --silent --show-error --max-time 5 --cacert "$tls/ca.crt" \
+                  https://127.0.0.1:19443/health > "$RUNNER_TEMP/ios-ui-evidence/peer-health.txt"
                 testCase=testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay
               fi
               set +e
@@ -197,6 +219,27 @@ jobs:
               -exec cp {} "$RUNNER_TEMP/ios-ui-evidence/crashes/" \; || true
           fi
           exit "$result"
+      - name: Refuse secure writes without a linked application entitlement
+        shell: bash
+        run: |
+          set -euo pipefail
+          device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
+            "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+          xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
+            -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
+            -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-no-entitlement-build" \
+            -only-testing:HostSmokeUITests/HostSmokeUITests/testMissingEntitlementRefusesSecureWrite \
+            -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/NoEntitlement.xcresult" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS= \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/keychain-no-entitlement.log"
+          binary="$RUNNER_TEMP/ios-no-entitlement-build/Build/Products/Debug-iphonesimulator/HostSmoke.app/HostSmoke"
+          if node runtime/ios-host/Tests/simulator-entitlements.mjs "$binary" \
+              "$RUNNER_TEMP/ios-ui-evidence/no-entitlement-unexpected.plist" \
+              > "$RUNNER_TEMP/ios-ui-evidence/no-entitlement-section.log" 2>&1; then
+            echo 'negative fixture unexpectedly carries linked entitlements' >&2
+            exit 1
+          fi
       - name: Retain presentation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

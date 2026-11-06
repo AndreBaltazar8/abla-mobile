@@ -1,6 +1,16 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    // Executed only by the separate no-entitlements build, never weakened into
+    // accepting plaintext storage or treating a refused write as success.
+    func testMissingEntitlementRefusesSecureWrite() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["keychain-refusal"].tap()
+        let refused = app.staticTexts["keychain_needs_entitlement"].waitForExistence(timeout: 10)
+        let phase = app.staticTexts["status"].label
+        XCTAssertTrue(refused, "fixed fixture phase: \(phase)")
+    }
     func testEmptyFileFilterOpensSystemPickerAndCancellationCompletes() {
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
@@ -50,9 +60,11 @@ import XCTest
         app.buttons["nfc"].tap()
         XCTAssertTrue(app.staticTexts["unicode_nfc"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["editor_bytes_nfc"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["ordinary_bytes_nfc"].waitForExistence(timeout: 5))
         app.buttons["nfd"].tap()
         XCTAssertTrue(app.staticTexts["unicode_nfd"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["editor_bytes_nfd"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["ordinary_bytes_nfd"].waitForExistence(timeout: 5))
     }
     func testNewRouteCannotRetainUnacknowledgedSecureEdit() {
         let app = XCUIApplication(); app.launch()
