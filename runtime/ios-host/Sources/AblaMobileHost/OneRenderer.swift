@@ -28,9 +28,9 @@ public struct AblaMobileRoot: View {
         }
         .onAppear { store.start() }
         .fileImporter(isPresented: Binding(get: { store.pickingFile }, set: { store.setFilePickerPresented($0) }),
-                      allowedContentTypes: store.fileTypes, allowsMultipleSelection: store.multipleFiles) {
-            store.filesPicked($0)
-        }
+                      allowedContentTypes: store.fileTypes, allowsMultipleSelection: store.multipleFiles,
+                      onCompletion: { store.filesPicked($0) },
+                      onCancellation: { store.filesPicked(.success([])) })
         // A scene background transition is not process shutdown. The app host
         // explicitly calls stop only when it intends to end this runtime.
     }

@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { extractEntitlements } from './simulator-entitlements.mjs';
+const bytes = Buffer.alloc(256);
+bytes.writeUInt32LE(0xfeedfacf, 0); bytes.writeUInt32LE(0x0100000c, 4);
+bytes.writeUInt32LE(1, 16); bytes.writeUInt32LE(152, 20);
+bytes.writeUInt32LE(0x19, 32); bytes.writeUInt32LE(152, 36); bytes.writeUInt32LE(1, 96);
+bytes.write('__entitlements', 104); bytes.write('__TEXT', 120);
+const xml = Buffer.from('<plist><dict/></plist>');
+bytes.writeBigUInt64LE(BigInt(xml.length + 2), 144); bytes.writeUInt32LE(220, 152); xml.copy(bytes, 220);
+assert.deepEqual(extractEntitlements(bytes), xml);
+assert.throws(() => extractEntitlements(bytes.subarray(0, 150)));
+const missing = Buffer.from(bytes); missing.fill(0, 104, 120);
+assert.throws(() => extractEntitlements(missing));
+const overflow = Buffer.from(bytes); overflow.writeBigUInt64LE(0xffffffffffffffffn, 144);
+assert.throws(() => extractEntitlements(overflow));
+console.log('linked entitlement reader: valid, truncated, missing and oversized controls passed');

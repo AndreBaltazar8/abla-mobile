@@ -150,10 +150,13 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
           result=${PIPESTATUS[0]}
           set -e
-          codesign --display --entitlements :- \
+          codesign --display --verbose=2 \
             "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app" \
-            > "$RUNNER_TEMP/ios-ui-evidence/simulator-entitlements.plist" \
-            2> "$RUNNER_TEMP/ios-ui-evidence/simulator-signature.txt"
+            > "$RUNNER_TEMP/ios-ui-evidence/simulator-signature.txt" 2>&1
+          node runtime/ios-host/Tests/simulator-entitlements.test.mjs
+          node runtime/ios-host/Tests/simulator-entitlements.mjs \
+            "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app/HostSmoke" \
+            "$RUNNER_TEMP/ios-ui-evidence/simulator-entitlements.plist"
           test "$(plutil -extract application-identifier raw -o - "$RUNNER_TEMP/ios-ui-evidence/simulator-entitlements.plist")" = org.abla.host-smoke
           if test "$result" -eq 0; then
             for mode in untrusted trusted; do
