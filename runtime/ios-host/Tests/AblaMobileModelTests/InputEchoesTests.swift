@@ -2,6 +2,18 @@ import XCTest
 @testable import AblaMobileModel
 
 final class InputEchoesTests: XCTestCase {
+    func testCanonicallyEquivalentTextIsNotAnExactByteEcho() {
+        var field = InputEchoes(initial: "")
+        XCTAssertTrue(field.changed("\u{e9}"))
+        let replacement = field.acceptModel("e\u{301}", focused: true, expiredGeneration: nil)
+        XCTAssertNotNil(replacement)
+        XCTAssertEqual(Array((replacement ?? "").utf8), [0x65, 0xcc, 0x81])
+        XCTAssertFalse(field.hasPending)
+        var other = InputEchoes(initial: "\u{e9}")
+        other.changed("pending")
+        let changed = other.acceptModel("e\u{301}", focused: true, expiredGeneration: nil)
+        XCTAssertEqual(Array((changed ?? "").utf8), [0x65, 0xcc, 0x81])
+    }
     func testDelayedPrefixEchoPreservesNewerFocusedEdits() {
         var field = InputEchoes(initial: "")
         XCTAssertTrue(field.changed("a")); let old = field.generation

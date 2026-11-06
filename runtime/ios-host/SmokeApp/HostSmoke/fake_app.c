@@ -29,6 +29,8 @@ int64_t abla_mobile_run(void) {
             "{\"type\":\"one.pressable\",\"key\":\"blocked\",\"properties\":{\"a.onPress\":\"9\",\"a.text\":\"Blocked\",\"a.enabled\":\"false\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"ignore\",\"properties\":{\"a.onPress\":\"10\",\"a.text\":\"Ignore echoes\"},\"children\":[]},"
             "{\"type\":\"one.pressable\",\"key\":\"route\",\"properties\":{\"a.onPress\":\"11\",\"a.text\":\"New route\"},\"children\":[]},"
+            "{\"type\":\"one.pressable\",\"key\":\"nfc\",\"properties\":{\"a.onPress\":\"15\",\"a.text\":\"Set NFC\"},\"children\":[]},"
+            "{\"type\":\"one.pressable\",\"key\":\"nfd\",\"properties\":{\"a.onPress\":\"16\",\"a.text\":\"Set NFD\"},\"children\":[]},"
             "{\"type\":\"one.text\",\"key\":\"status\",\"properties\":{\"a.text\":\"%s\"},\"children\":[]}]}}",
             (long long)revision, (long long)entry, value, status);
         if (size <= 0 || size >= (int)sizeof(tree) || !publish(tree)) return 0;
@@ -51,6 +53,8 @@ int64_t abla_mobile_run(void) {
         if (event == 9) status = "disabled_button_sent";
         if (event == 10) { ignore = 1; memset(value, 0, sizeof(value)); status = "ignore_mode"; }
         if (event == 11) { entry++; ignore = 0; memset(value, 0, sizeof(value)); status = "new_route"; }
+        if (event == 15) { strcpy(value, "\xc3\xa9"); status = "unicode_nfc"; }
+        if (event == 16) { strcpy(value, "e\xcc\x81"); status = "unicode_nfd"; }
         memset(payload, 0, sizeof(payload));
     }
 }

@@ -26,9 +26,9 @@ public struct InputEchoes: Sendable {
     public mutating func acceptModel(_ value: String, focused: Bool,
                                     expiredGeneration: UInt64?) -> String? {
         var replacement: String?
-        if value != seen {
+        if !value.utf8.elementsEqual(seen.utf8) {
             seen = value
-            if let echo = pending.firstIndex(of: value) {
+            if let echo = pending.firstIndex(where: { $0.utf8.elementsEqual(value.utf8) }) {
                 pendingBytes -= pending.prefix(echo + 1).reduce(0) { $0 + $1.utf8.count }
                 pending.removeFirst(echo + 1)
             } else { pending.removeAll(); pendingBytes = 0; replacement = value }

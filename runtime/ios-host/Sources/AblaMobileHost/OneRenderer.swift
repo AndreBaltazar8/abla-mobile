@@ -112,7 +112,7 @@ public struct AblaMobileRoot: View {
             let fallback = keyboard == "number" ? 8 : keyboard == "decimal" ? 32 : 4000
             let limit = Int(node.attribute("maxLength")) ?? fallback
             let next = OneEditorValue.normalized(raw, keyboard: keyboard, maximumUTF16: limit)
-            guard next != editing else { return }
+            guard !next.utf8.elementsEqual(editing.utf8) else { return }
             let event = node.event("onChange")
             guard event > 0 else { editing = next; return }
             var proposed = echoes
@@ -141,7 +141,7 @@ public struct AblaMobileRoot: View {
         .modifier(OneDecoration(node: node, focused: focused))
         .disabled(node.attribute("enabled") == "false")
         .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity); focused = false }
-        .onChange(of: model) { _, next in accept(next) }
+        .onChange(of: Array(model.utf8)) { _, _ in accept(model) }
         .onChange(of: focused) { _, _ in accept(model) }
         .task(id: echoes.generation) {
             let generation = echoes.generation

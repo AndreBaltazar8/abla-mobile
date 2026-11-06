@@ -1,6 +1,17 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    func testApplicationReplacementPreservesExactUnicodeBytes() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.secureTextFields["secure"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 5))
+        app.buttons["nfc"].tap()
+        XCTAssertTrue(app.staticTexts["unicode_nfc"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["editor_bytes_nfc"].waitForExistence(timeout: 5))
+        app.buttons["nfd"].tap()
+        XCTAssertTrue(app.staticTexts["unicode_nfd"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["editor_bytes_nfd"].waitForExistence(timeout: 5))
+    }
     func testNewRouteCannotRetainUnacknowledgedSecureEdit() {
         let app = XCUIApplication(); app.launch()
         let field = app.secureTextFields["secure"]
