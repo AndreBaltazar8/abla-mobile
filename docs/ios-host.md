@@ -208,8 +208,13 @@ probe; this does not establish a trust-policy failure.
 Focused run42170822457 passed unknown-CA refusal, then failed the independent
 host health request before the trusted app testcase. Candidate3abbd5be limits
 the diagnostic job to one booted Simulator at a time and records host memory
-and boot states. Run42173007448 is pending. It changes no production code or
-client policy, and its fixture hypothesis is unproved.
+and boot states.
+[42173007448](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42173007448)
+passed unknown-CA refusal and the trusted sequence: exactly one accepted GET,
+one302, one lost-answer POST, zero redirected requests or automatic replays.
+The OS trust probe passed; the peer recorded three new completed TLS handshakes
+and no additional TLS errors in the trusted phase. This supports the unchanged
+client under the isolated fixture; it does not prove the earlier failure cause.
 
 Simulator memory and successful archive linkage do not establish physical
 iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
