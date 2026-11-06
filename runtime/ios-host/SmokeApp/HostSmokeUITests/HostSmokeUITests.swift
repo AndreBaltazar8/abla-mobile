@@ -12,6 +12,7 @@ import XCTest
         XCTAssertTrue(blocked.exists)
         XCTAssertFalse(blocked.isEnabled)
         field.tap()
+        XCTAssertTrue(app.staticTexts["secure_traits_valid"].waitForExistence(timeout: 5))
         field.typeText("s3crEt")
         XCTAssertTrue(app.staticTexts["editing"].waitForExistence(timeout: 5))
         app.buttons["accept"].tap()

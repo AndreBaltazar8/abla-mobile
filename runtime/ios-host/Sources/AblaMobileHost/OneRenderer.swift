@@ -41,7 +41,10 @@ public struct AblaMobileRoot: View {
     }
     // Container identifiers propagate to descendants in SwiftUI and would
     // replace every editor/button's own key. Assign identity on controls only.
-    var body: some View { content }
+    @ViewBuilder var body: some View {
+        if ["one.pressable", "one.link", "button", "one.input"].contains(node.type) { content }
+        else { content.modifier(OneDecoration(node: node)) }
+    }
     @ViewBuilder private var content: some View {
         switch node.type {
         case "one.column", "column", "theme", "surface", "card":
@@ -52,13 +55,14 @@ public struct AblaMobileRoot: View {
         case "one.scrollRow": ScrollView(.horizontal) { HStack(spacing: gap) { children } }
         case "one.text", "text":
             Text(node.attribute("text", default: node.value("text")))
-                .font(.system(size: CGFloat(max(8, min(96, node.number("fontSize", default: 16))))))
+                .font(.system(size: CGFloat(max(8, min(96, node.number("size", default: 16))))))
                 .accessibilityIdentifier(node.key)
         case "one.pressable", "one.link", "button":
             Button { _ = store.send(node.event("onPress"), revision: revision) } label: {
                 if node.children.isEmpty { Text(node.attribute("text", default: node.value("text"))) }
                 else { VStack(spacing: gap) { children } }
             }.disabled(node.attribute("enabled") == "false" || node.event("onPress") == 0)
+                .buttonStyle(OneControlStyle(node: node))
                 .accessibilityIdentifier(node.key)
         case "one.input": OneInputView(node: node, revision: revision, store: store).id(node.key).accessibilityIdentifier(node.key)
         case "one.spacer", "spacer": Spacer(minLength: 0)
@@ -88,11 +92,16 @@ public struct AblaMobileRoot: View {
     private var secure: Bool { node.attribute("secure") == "true" }
     private var model: String { node.attribute("value") }
     private var binding: Binding<String> {
-        Binding(get: { editing }, set: { next in
-            let limit = max(0, min(16384, Int(node.attribute("maxLength")) ?? 4000))
-            guard next.utf16.count <= limit, next != editing else { return }
+        Binding(get: { editing }, set: { raw in
+            let keyboard = node.attribute("keyboard")
+            let fallback = keyboard == "number" ? 8 : keyboard == "decimal" ? 32 : 4000
+            let limit = Int(node.attribute("maxLength")) ?? fallback
+            let next = OneEditorValue.normalized(raw, keyboard: keyboard, maximumUTF16: limit)
+            guard next != editing else { return }
+            let event = node.event("onChange")
+            guard event > 0 else { editing = next; return }
             var proposed = echoes
-            guard proposed.changed(next), store.send(node.event("onChange"), revision: revision, payload: next, change: true) else { return }
+            guard proposed.changed(next), store.send(event, revision: revision, payload: next, change: true) else { return }
             echoes = proposed; editing = next
         })
     }
@@ -113,6 +122,7 @@ public struct AblaMobileRoot: View {
             }
         }
         .focused($focused)
+        .modifier(OneDecoration(node: node, focused: focused))
         .disabled(node.attribute("enabled") == "false")
         .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision); focused = false }
         .onChange(of: model) { _, next in accept(next) }
