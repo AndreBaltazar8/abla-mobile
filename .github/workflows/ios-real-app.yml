@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AndreBaltazar8/ablac
-          ref: 0ee1fac68cc41ea435801d4ae4342c45ceddd306
+          ref: 64d0bb39364327df146df71c672a4438623c98ad
           path: ablac
           persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
