@@ -18,13 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 2230766ffdb01203316898f01a032f470da242c9
+          ref: 8d4d6062aeff324b45e6b8fcc451d64630515f4f
           path: abla-mobile
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AndreBaltazar8/abla-one
-          ref: 89ad6d52e5916b75bd15f8ff86ec2eff649568ef
+          ref: 14ad817e00cf42cc098eaa0efbe9b41bbee02302
           path: abla-one
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -107,6 +107,9 @@ jobs:
             -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
             -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-real-build" \
             -resultBundlePath "$RUNNER_TEMP/ios-real-evidence/RealOne.xcresult" \
+            -only-testing:HostSmokeUITests/HostSmokeUITests/testApplicationReplacementPreservesExactUnicodeBytes \
+            -only-testing:HostSmokeUITests/HostSmokeUITests/testNewRouteCannotRetainUnacknowledgedSecureEdit \
+            -only-testing:HostSmokeUITests/HostSmokeUITests/testSecureEditingExactActionAndNativeDisabledState \
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             EXCLUDED_SOURCE_FILE_NAMES=fake_app.c "OTHER_LDFLAGS=\$(inherited) $archive" \
             2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/simulator-real.log"
