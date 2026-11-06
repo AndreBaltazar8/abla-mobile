@@ -135,7 +135,16 @@ public struct AblaMobileRoot: View {
                     submitted: { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity) })
                     .privacySensitive()
             } else if node.attribute("multiline") == "true" {
-                TextField(node.attribute("placeholder"), text: binding, axis: .vertical)
+                ZStack(alignment: .topLeading) {
+                    ExactMultilineEditor(text: binding, identifier: node.key,
+                        enabled: node.attribute("enabled") != "false", keyboard: keyboard,
+                        focusChanged: { focused = $0 })
+                    if editing.isEmpty {
+                        Text(node.attribute("placeholder")).foregroundStyle(Color(uiColor: .placeholderText))
+                            .padding(.top, 8).padding(.leading, 5)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
             } else {
                 ExactSingleLineEditor(text: binding, secure: false, placeholder: node.attribute("placeholder"),
                     identifier: node.key, enabled: node.attribute("enabled") != "false", keyboard: keyboard,
@@ -212,6 +221,53 @@ public struct AblaMobileRoot: View {
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
             parent.submitted(); textField.resignFirstResponder(); return true
         }
+    }
+}
+
+/// UITextView keeps newlines and applies application replacements by UTF-8
+/// identity, including canonically equivalent strings with different bytes.
+@MainActor private struct ExactMultilineEditor: UIViewRepresentable {
+    @Binding var text: String
+    let identifier: String
+    let enabled: Bool
+    let keyboard: UIKeyboardType
+    let focusChanged: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = .clear
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return view
+    }
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        let active = enabled && context.environment.isEnabled
+        view.isEditable = active
+        view.isSelectable = active
+        view.accessibilityIdentifier = identifier
+        view.keyboardType = keyboard
+        if !(view.text ?? "").utf8.elementsEqual(text.utf8) { view.text = text }
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = max(1, proposal.width ?? 320)
+        let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        // Long values scroll inside the editor instead of growing an unbounded
+        // view. This is a presentation bound, separate from maxLength.
+        return CGSize(width: width, height: min(240, max(44, fit.height)))
+    }
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ExactMultilineEditor
+        init(_ parent: ExactMultilineEditor) { self.parent = parent }
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text ?? ""
+            if !(textView.text ?? "").utf8.elementsEqual(parent.text.utf8) { textView.text = parent.text }
+        }
+        func textViewDidBeginEditing(_ textView: UITextView) { parent.focusChanged(true) }
+        func textViewDidEndEditing(_ textView: UITextView) { parent.focusChanged(false) }
     }
 }
 #endif
