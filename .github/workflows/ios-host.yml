@@ -102,6 +102,7 @@ jobs:
             xcrun simctl boot "$device"
           fi
           xcrun simctl bootstatus "$device" -b
+          originalDevice=$device
           # All keys stay outside the evidence artifact. This CA is installed
           # only in this disposable Simulator, after the unknown-issuer test.
           umask 077
@@ -150,6 +151,7 @@ jobs:
               xcrun simctl shutdown "$trustedDevice" 2>/dev/null || true
               xcrun simctl delete "$trustedDevice" 2>/dev/null || true
             fi
+            if test -n "$originalDevice"; then xcrun simctl shutdown "$originalDevice" 2>/dev/null || true; fi
             rm -rf "$tls"
           }
           trap cleanup EXIT
@@ -192,11 +194,18 @@ jobs:
                 # provisioning from that Simulator's connection/trust state.
                 type=$(jq -r --arg id "$device" '.devices[][]|select(.udid==$id)|.deviceTypeIdentifier' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
                 runtime=$(jq -r --arg id "$device" '.devices|to_entries[]|select(any(.value[];.udid==$id))|.key' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+                # Match the accepted focused TLS fixture: one booted Simulator.
+                xcrun simctl shutdown "$originalDevice"
+                originalDevice=''
+                xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/devices-before-trusted.json"
+                test "$(jq '[.devices[][] | select(.state == "Booted")] | length' "$RUNNER_TEMP/ios-ui-evidence/devices-before-trusted.json")" = 0
                 trustedDevice=$(xcrun simctl create "Abla-trusted-$GITHUB_RUN_ID" "$type" "$runtime")
                 xcrun simctl boot "$trustedDevice"
                 xcrun simctl bootstatus "$trustedDevice" -b
                 xcrun simctl keychain "$trustedDevice" add-root-cert "$tls/ca.crt"
                 device=$trustedDevice
+                xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/devices-trusted.json"
+                test "$(jq '[.devices[][] | select(.state == "Booted")] | length' "$RUNNER_TEMP/ios-ui-evidence/devices-trusted.json")" = 1
                 kill -0 "$peer"
                 curl --fail --silent --show-error --max-time 5 --cacert "$tls/ca.crt" \
                   https://127.0.0.1:19443/health > "$RUNNER_TEMP/ios-ui-evidence/peer-health.txt"
@@ -239,6 +248,8 @@ jobs:
           set -euo pipefail
           device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
             "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
           xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
             -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
             -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-no-entitlement-build" \
