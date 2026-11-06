@@ -179,6 +179,28 @@ ordinary journeys passed. Candidate b167a852 uses a byte-aware UITextView,
 retains actual newlines and bounds the visible height with native scrolling.
 Its unchanged assertion/deadline is under test, with no acceptance claim yet.
 
+[42160960015](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42160960015)
+accepted multiline replacement through the actual One application (44 contracts,
+exact xcframework and four UI journeys). Then
+[42162978605](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42162978605)
+accepted native typed-newline delivery as well: all five actual-app journeys
+passed on released0.2.47, Mobile5c07ea41 and One5e9dcab7.
+
+The component revalidation42163527083 remains failed: seven ordinary UI cases
+and unknown-CA refusal passed, while trusted HTTPS reached a fixed failure
+phase. The peer saw one new TCP connection and one TLS error, no completed TLS
+handshake and no HTTP. The action was delivered; the precise TLS refusal is
+unproved. This is separate from the actual application gate.
+
+Candidate715930b adds a fixture-only OS trust precondition using the generated
+public chain and the normal SSL hostname policy. It applies no custom anchor,
+exception or date override. The probe runs off the UI thread, following Apple's
+[trust-evaluation guidance](https://developer.apple.com/documentation/security/sectrustevaluatewitherror(_:_:)),
+with [certificate network fetching disabled](https://developer.apple.com/documentation/security/sectrustsetnetworkfetchallowed(_:_:)).
+Only fixed status codes and peer TLS error codes persist. The production
+URLSession client, trust policy, request deadline and no-replay behavior remain
+unchanged. This candidate has no acceptance claim until its CI gate finishes.
+
 Simulator memory and successful archive linkage do not establish physical
 iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
 on a device and publication need their own approval and evidence.
