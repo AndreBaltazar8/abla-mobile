@@ -2,14 +2,18 @@
 # CI-only focused TLS isolation: no base UI or missing-entitlement rerun.
 set -euo pipefail
 mkdir -p "$RUNNER_TEMP/ios-ui-evidence"
+sysctl -n hw.memsize > "$RUNNER_TEMP/ios-ui-evidence/host-memory-bytes.txt"
+vm_stat > "$RUNNER_TEMP/ios-ui-evidence/memory-initial.txt"
 xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/simulators.json"
 device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
   "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
 test -n "$device" && test "$device" != null
+test "$(jq '[.devices[][] | select(.state == "Booted")] | length' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")" = 0
 if test "$(jq -r --arg id "$device" '.devices[][] | select(.udid == $id) | .state' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")" = Shutdown; then
   xcrun simctl boot "$device"
 fi
 xcrun simctl bootstatus "$device" -b
+originalDevice=$device
 # All keys stay outside the evidence artifact. This CA is installed
 # only in this disposable Simulator, after the unknown-issuer test.
 umask 077
@@ -58,6 +62,7 @@ cleanup() {
     xcrun simctl shutdown "$trustedDevice" 2>/dev/null || true
     xcrun simctl delete "$trustedDevice" 2>/dev/null || true
   fi
+  if test -n "$originalDevice"; then xcrun simctl shutdown "$originalDevice" 2>/dev/null || true; fi
   rm -rf "$tls"
 }
 trap cleanup EXIT
@@ -100,11 +105,21 @@ if test "$result" -eq 0; then
       # provisioning from that Simulator's connection/trust state.
       type=$(jq -r --arg id "$device" '.devices[][]|select(.udid==$id)|.deviceTypeIdentifier' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
       runtime=$(jq -r --arg id "$device" '.devices|to_entries[]|select(any(.value[];.udid==$id))|.key' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+      # The earlier dual-boot fixture showed multi-minute system-app stalls
+      # and a host health timeout. Bound this job to one booted Simulator.
+      xcrun simctl shutdown "$originalDevice"
+      originalDevice=''
+      xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/devices-before-trusted.json"
+      test "$(jq '[.devices[][] | select(.state == "Booted")] | length' "$RUNNER_TEMP/ios-ui-evidence/devices-before-trusted.json")" = 0
+      vm_stat > "$RUNNER_TEMP/ios-ui-evidence/memory-after-untrusted-shutdown.txt"
       trustedDevice=$(xcrun simctl create "Abla-trusted-$GITHUB_RUN_ID" "$type" "$runtime")
       xcrun simctl boot "$trustedDevice"
       xcrun simctl bootstatus "$trustedDevice" -b
       xcrun simctl keychain "$trustedDevice" add-root-cert "$tls/ca.crt"
       device=$trustedDevice
+      xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/devices-trusted.json"
+      test "$(jq '[.devices[][] | select(.state == "Booted")] | length' "$RUNNER_TEMP/ios-ui-evidence/devices-trusted.json")" = 1
+      vm_stat > "$RUNNER_TEMP/ios-ui-evidence/memory-before-trusted-http.txt"
       kill -0 "$peer"
       curl --fail --silent --show-error --max-time 5 --cacert "$tls/ca.crt" \
         https://127.0.0.1:19443/health > "$RUNNER_TEMP/ios-ui-evidence/peer-health.txt"

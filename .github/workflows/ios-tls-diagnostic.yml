@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify unchanged host and fixture inputs
         shell: bash
@@ -27,7 +27,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ios-ui-evidence"
           { git rev-parse HEAD; sw_vers; xcodebuild -version; swift --version; } \
             > "$RUNNER_TEMP/ios-ui-evidence/versions.txt"
-      - name: Exercise only the two TLS cases without client retries
+      - name: Exercise two TLS cases with one booted Simulator and no client retries
         shell: bash
         run: tools/ios-tls-diagnostic.sh
       - name: Retain scoped TLS diagnostic evidence
