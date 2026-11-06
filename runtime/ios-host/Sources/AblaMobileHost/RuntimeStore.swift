@@ -36,7 +36,7 @@ import CAblaMobile
         }
     }
     private func readSnapshot() {
-        if abla_ios_state_v1() == ABLA_IOS_FAILED {
+        if abla_ios_state_v1() == Int64(ABLA_IOS_FAILED.rawValue) {
             failure = "runtime_failed_\(abla_ios_failure_v1())"; tree = nil; return
         }
         var next: Int64 = sequence
@@ -44,7 +44,7 @@ import CAblaMobile
             abla_ios_tree_copy_v1(sequence, $0.baseAddress, Int64($0.count), &next)
         }
         guard count > 0 else { return }
-        defer { buffer.withUnsafeMutableBytes { $0.initializeMemory(as: UInt8.self, repeating: 0) } }
+        defer { _ = buffer.withUnsafeMutableBytes { $0.initializeMemory(as: UInt8.self, repeating: 0) } }
         do {
             let decoded = try OneTree.decode(Data(buffer.prefix(Int(count))))
             guard decoded.revision > (tree?.revision ?? 0) else {
