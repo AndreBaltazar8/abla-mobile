@@ -81,3 +81,33 @@ jobs:
           name: ios-host-contract-evidence
           path: ${{ runner.temp }}/ios-host-evidence
           retention-days: 14
+  simulator-presentation:
+    name: iOS Simulator presentation with fake producer
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Exercise actual SwiftUI secure editing and disabled action
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ios-ui-evidence"
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/simulators.json"
+          device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
+            "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
+          test -n "$device" && test "$device" != null
+          xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
+            -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
+            -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-smoke-build" \
+            -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HostSmoke.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
+      - name: Retain presentation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios-simulator-presentation-evidence
+          path: ${{ runner.temp }}/ios-ui-evidence
+          retention-days: 14

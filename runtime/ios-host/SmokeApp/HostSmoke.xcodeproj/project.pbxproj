@@ -1,0 +1,44 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  00000000000000000000A001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {00000000000000000000A002 = {CreatedOnToolsVersion = 16.0;}; 00000000000000000000A003 = {CreatedOnToolsVersion = 16.0; TestTargetID = 00000000000000000000A002;};};}; buildConfigurationList = 00000000000000000000A101; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 00000000000000000000A010; packageReferences = (00000000000000000000A060); productRefGroup = 00000000000000000000A011; projectDirPath = ""; projectRoot = ""; targets = (00000000000000000000A002, 00000000000000000000A003);};
+  00000000000000000000A002 = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000A102; buildPhases = (00000000000000000000A020, 00000000000000000000A021, 00000000000000000000A022); buildRules = (); dependencies = (); name = HostSmoke; packageProductDependencies = (00000000000000000000A061); productName = HostSmoke; productReference = 00000000000000000000A040; productType = "com.apple.product-type.application";};
+  00000000000000000000A003 = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000A103; buildPhases = (00000000000000000000A023, 00000000000000000000A024, 00000000000000000000A025); buildRules = (); dependencies = (00000000000000000000A050); name = HostSmokeUITests; productName = HostSmokeUITests; productReference = 00000000000000000000A041; productType = "com.apple.product-type.bundle.ui-testing";};
+  00000000000000000000A010 = {isa = PBXGroup; children = (00000000000000000000A012, 00000000000000000000A013, 00000000000000000000A011); sourceTree = "<group>";};
+  00000000000000000000A011 = {isa = PBXGroup; children = (00000000000000000000A040, 00000000000000000000A041); name = Products; sourceTree = "<group>";};
+  00000000000000000000A012 = {isa = PBXGroup; children = (00000000000000000000A030, 00000000000000000000A031); path = HostSmoke; sourceTree = "<group>";};
+  00000000000000000000A013 = {isa = PBXGroup; children = (00000000000000000000A032); path = HostSmokeUITests; sourceTree = "<group>";};
+  00000000000000000000A020 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A070, 00000000000000000000A071); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A073); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A023 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A072); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A024 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A025 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A030 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostSmokeApp.swift; sourceTree = "<group>";};
+  00000000000000000000A031 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = fake_app.c; sourceTree = "<group>";};
+  00000000000000000000A032 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostSmokeUITests.swift; sourceTree = "<group>";};
+  00000000000000000000A040 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HostSmoke.app; sourceTree = BUILT_PRODUCTS_DIR;};
+  00000000000000000000A041 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HostSmokeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
+  00000000000000000000A050 = {isa = PBXTargetDependency; target = 00000000000000000000A002; targetProxy = 00000000000000000000A051;};
+  00000000000000000000A051 = {isa = PBXContainerItemProxy; containerPortal = 00000000000000000000A001; proxyType = 1; remoteGlobalIDString = 00000000000000000000A002; remoteInfo = HostSmoke;};
+  00000000000000000000A060 = {isa = XCLocalSwiftPackageReference; relativePath = ..;};
+  00000000000000000000A061 = {isa = XCSwiftPackageProductDependency; package = 00000000000000000000A060; productName = AblaMobileHost;};
+  00000000000000000000A070 = {isa = PBXBuildFile; fileRef = 00000000000000000000A030;};
+  00000000000000000000A071 = {isa = PBXBuildFile; fileRef = 00000000000000000000A031;};
+  00000000000000000000A072 = {isa = PBXBuildFile; fileRef = 00000000000000000000A032;};
+  00000000000000000000A073 = {isa = PBXBuildFile; productRef = 00000000000000000000A061;};
+  00000000000000000000A101 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A110, 00000000000000000000A111); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+  00000000000000000000A102 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A112, 00000000000000000000A113); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+  00000000000000000000A103 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A114, 00000000000000000000A115); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+  00000000000000000000A110 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 6.0;}; name = Debug;};
+  00000000000000000000A111 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 6.0;}; name = Release;};
+  00000000000000000000A112 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; MARKETING_VERSION = 0.1; PRODUCT_BUNDLE_IDENTIFIER = org.abla.host-smoke; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = "1,2";}; name = Debug;};
+  00000000000000000000A113 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; MARKETING_VERSION = 0.1; PRODUCT_BUNDLE_IDENTIFIER = org.abla.host-smoke; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = "1,2";}; name = Release;};
+  00000000000000000000A114 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = org.abla.host-smoke-tests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = HostSmoke; TARGETED_DEVICE_FAMILY = "1,2";}; name = Debug;};
+  00000000000000000000A115 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = org.abla.host-smoke-tests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = HostSmoke; TARGETED_DEVICE_FAMILY = "1,2";}; name = Release;};
+ };
+ rootObject = 00000000000000000000A001;
+}
