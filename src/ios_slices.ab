@@ -9,6 +9,7 @@ compile fun mobileBuildIosSlices(
     if (name == "" || entry == "" || outputDirectory == "") return false
     val device = iosDeviceTarget()
     val simulator = iosSimulatorTarget()
+    if (device == "" || simulator == "") return false
     var accepted = buildProgram(
         "$name-ios-device", entry, "$outputDirectory/ios-arm64/libabla_app.a",
         device, "static-library", fast, cache
