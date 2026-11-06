@@ -56,8 +56,14 @@ import XCTest
         XCTAssertTrue(app.staticTexts["https_untrusted_refused"].waitForExistence(timeout: 20))
     }
     func testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay() {
-        let app = XCUIApplication(); app.launch()
+        let app = XCUIApplication()
+        app.launchEnvironment["ABLA_HOST_TEST_TRUST_PROBE"] = "1"
+        app.launch()
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        guard app.staticTexts["system_trust_valid"].waitForExistence(timeout: 10) else {
+            let trust = app.staticTexts["fixture.systemTrust"].label
+            XCTFail("OS trust precondition: \(trust)"); return
+        }
         app.buttons["https"].tap()
         let completed = app.staticTexts["https_system_trust_roundtrip_passed"].waitForExistence(timeout: 25)
         let observed = app.staticTexts["status"].label

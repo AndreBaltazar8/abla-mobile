@@ -9,17 +9,18 @@
   00000000000000000000A003 = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000A103; buildPhases = (00000000000000000000A023, 00000000000000000000A024, 00000000000000000000A025); buildRules = (); dependencies = (00000000000000000000A050); name = HostSmokeUITests; productName = HostSmokeUITests; productReference = 00000000000000000000A041; productType = "com.apple.product-type.bundle.ui-testing";};
   00000000000000000000A010 = {isa = PBXGroup; children = (00000000000000000000A012, 00000000000000000000A013, 00000000000000000000A011); sourceTree = "<group>";};
   00000000000000000000A011 = {isa = PBXGroup; children = (00000000000000000000A040, 00000000000000000000A041); name = Products; sourceTree = "<group>";};
-  00000000000000000000A012 = {isa = PBXGroup; children = (00000000000000000000A030, 00000000000000000000A031); path = HostSmoke; sourceTree = "<group>";};
+  00000000000000000000A012 = {isa = PBXGroup; children = (00000000000000000000A030, 00000000000000000000A031, 00000000000000000000A033); path = HostSmoke; sourceTree = "<group>";};
   00000000000000000000A013 = {isa = PBXGroup; children = (00000000000000000000A032); path = HostSmokeUITests; sourceTree = "<group>";};
   00000000000000000000A020 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A070, 00000000000000000000A071); runOnlyForDeploymentPostprocessing = 0;};
   00000000000000000000A021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A073); runOnlyForDeploymentPostprocessing = 0;};
-  00000000000000000000A022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+  00000000000000000000A022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A074); runOnlyForDeploymentPostprocessing = 0;};
   00000000000000000000A023 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000A072); runOnlyForDeploymentPostprocessing = 0;};
   00000000000000000000A024 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
   00000000000000000000A025 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
   00000000000000000000A030 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostSmokeApp.swift; sourceTree = "<group>";};
   00000000000000000000A031 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = fake_app.c; sourceTree = "<group>";};
   00000000000000000000A032 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostSmokeUITests.swift; sourceTree = "<group>";};
+  00000000000000000000A033 = {isa = PBXFileReference; lastKnownFileType = text.json; path = FixtureTrust.json; sourceTree = "<group>";};
   00000000000000000000A040 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HostSmoke.app; sourceTree = BUILT_PRODUCTS_DIR;};
   00000000000000000000A041 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HostSmokeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
   00000000000000000000A050 = {isa = PBXTargetDependency; target = 00000000000000000000A002; targetProxy = 00000000000000000000A051;};
@@ -30,6 +31,7 @@
   00000000000000000000A071 = {isa = PBXBuildFile; fileRef = 00000000000000000000A031;};
   00000000000000000000A072 = {isa = PBXBuildFile; fileRef = 00000000000000000000A032;};
   00000000000000000000A073 = {isa = PBXBuildFile; productRef = 00000000000000000000A061;};
+  00000000000000000000A074 = {isa = PBXBuildFile; fileRef = 00000000000000000000A033;};
   00000000000000000000A101 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A110, 00000000000000000000A111); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
   00000000000000000000A102 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A112, 00000000000000000000A113); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
   00000000000000000000A103 = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A114, 00000000000000000000A115); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Security
 import AblaMobileHost
 
 @main struct HostSmokeApp: App {
@@ -8,6 +9,7 @@ import AblaMobileHost
     @State private var editorBytes = "editor_bytes_other"
     @State private var ordinaryBytes = "ordinary_bytes_other"
     @State private var multilineBytes = "multiline_bytes_other"
+    @State private var systemTrust = "system_trust_not_requested"
     var body: some Scene {
         WindowGroup {
             AblaMobileRoot(store: runtime)
@@ -18,9 +20,44 @@ import AblaMobileHost
                         Text(editorBytes).accessibilityIdentifier("fixture.bytes")
                         Text(ordinaryBytes).accessibilityIdentifier("fixture.ordinary")
                         Text(multilineBytes).accessibilityIdentifier("fixture.multiline")
+                        Text(systemTrust).accessibilityIdentifier("fixture.systemTrust")
                     }
+                    .allowsHitTesting(false)
+                }
+                .task {
+                    guard ProcessInfo.processInfo.environment["ABLA_HOST_TEST_TRUST_PROBE"] == "1" else { return }
+                    guard let url = Bundle.main.url(forResource: "FixtureTrust", withExtension: "json"),
+                          let data = try? Data(contentsOf: url), data.count <= 16384 else {
+                        systemTrust = "system_trust_fixture_missing"; return
+                    }
+                    systemTrust = await Task.detached { FixtureTrustProbe.evaluate(data) }.value
                 }
         }
+    }
+}
+
+// Fixture-only OS trust readback. The public chain helps chain construction;
+// it is NOT installed as a custom anchor and no trust exception is applied.
+// Evaluation stays off the UI thread and cannot fetch missing certificates.
+private enum FixtureTrustProbe {
+    nonisolated static func evaluate(_ data: Data) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let leafText = json["leaf"], let rootText = json["root"],
+              leafText.utf8.count <= 8192, rootText.utf8.count <= 8192,
+              let leafData = Data(base64Encoded: leafText), let rootData = Data(base64Encoded: rootText),
+              let leaf = SecCertificateCreateWithData(nil, leafData as CFData),
+              let root = SecCertificateCreateWithData(nil, rootData as CFData) else {
+            return "system_trust_fixture_invalid"
+        }
+        var trust: SecTrust?
+        let created = SecTrustCreateWithCertificates([leaf, root] as CFArray,
+            SecPolicyCreateSSL(true, "localhost" as CFString), &trust)
+        guard created == errSecSuccess, let trust else { return "system_trust_setup_\(created)" }
+        let configured = SecTrustSetNetworkFetchAllowed(trust, false)
+        guard configured == errSecSuccess else { return "system_trust_setup_\(configured)" }
+        var error: CFError?
+        if SecTrustEvaluateWithError(trust, &error) { return "system_trust_valid" }
+        return "system_trust_refused_\(error.map { CFErrorGetCode($0) } ?? 0)"
     }
 }
 

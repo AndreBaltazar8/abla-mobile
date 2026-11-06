@@ -130,6 +130,16 @@ jobs:
             -keyout "$tls/server.key" -out "$tls/server.csr" >> "$tls/generate.log" 2>&1
           openssl x509 -req -in "$tls/server.csr" -CA "$tls/ca.crt" -CAkey "$tls/ca.key" \
             -CAcreateserial -days 1 -sha256 -extfile "$tls/leaf.cnf" -out "$tls/server.crt" >> "$tls/generate.log" 2>&1
+          # Public certificates only. The app probes system trust without
+          # setting custom anchors or exceptions, before its one HTTP attempt.
+          node --input-type=module - "$tls/server.crt" "$tls/ca.crt" \
+            runtime/ios-host/SmokeApp/HostSmoke/FixtureTrust.json <<'NODE'
+          import fs from 'node:fs';
+          import { X509Certificate } from 'node:crypto';
+          const [leaf, root, output] = process.argv.slice(2);
+          const der = path => new X509Certificate(fs.readFileSync(path)).raw.toString('base64');
+          fs.writeFileSync(output, JSON.stringify({ leaf: der(leaf), root: der(root) }));
+          NODE
           node runtime/ios-host/Tests/https-standin.mjs "$tls/server.key" "$tls/server.crt" \
             "$RUNNER_TEMP/ios-ui-evidence/https-counts.json" > "$tls/server.log" 2>&1 &
           peer=$!
