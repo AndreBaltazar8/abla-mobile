@@ -43,7 +43,8 @@ if "$compiler" build \
     echo "invalid mobile template unexpectedly compiled" >&2
     exit 1
 fi
-grep -q 'error\[E_SUBPARSER_INVOCATION\]' \
+# parserFail is a deliberate grammar refusal, not a failed parser invocation.
+grep -Fq 'error[E_SUBPARSER_FAILURE]: interactive mobile element requires onTap' \
     "$output_directory/invalid-mobile-template.stderr"
 
 echo "mobile template diagnostics rejected a missing action"
