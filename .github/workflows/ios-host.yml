@@ -192,6 +192,8 @@ jobs:
                   https://127.0.0.1:19443/health > "$RUNNER_TEMP/ios-ui-evidence/peer-health.txt"
                 testCase=testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay
               fi
+              cp "$RUNNER_TEMP/ios-ui-evidence/https-counts.json.transport.json" \
+                "$RUNNER_TEMP/ios-ui-evidence/transport-before-$mode.json"
               set +e
               xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
                 -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
@@ -202,6 +204,8 @@ jobs:
                 2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/https-$mode.log"
               result=${PIPESTATUS[0]}
               set -e
+              cp "$RUNNER_TEMP/ios-ui-evidence/https-counts.json.transport.json" \
+                "$RUNNER_TEMP/ios-ui-evidence/transport-after-$mode.json"
               test "$result" -eq 0 || break
             done
             if test "$result" -eq 0; then

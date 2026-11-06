@@ -59,7 +59,12 @@ import XCTest
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
         app.buttons["https"].tap()
-        XCTAssertTrue(app.staticTexts["https_system_trust_roundtrip_passed"].waitForExistence(timeout: 25))
+        let completed = app.staticTexts["https_system_trust_roundtrip_passed"].waitForExistence(timeout: 25)
+        let observed = app.staticTexts["status"].label
+        let fixed = ["ready", "timer_ready", "https_in_progress", "https_queue_refused",
+                     "https_contract_failed", "https_system_trust_roundtrip_passed"]
+        let phase = fixed.contains(observed) ? observed : "other_fixed_fixture_phase"
+        XCTAssertTrue(completed, "HTTPS fixed fixture phase: \(phase)")
     }
     func testExplicitKeychainStoreReadDeleteRoundtrip() {
         let app = XCUIApplication(); app.launch()
