@@ -19,6 +19,11 @@ and navigation state still remain ordinary Abla variables.
 
 ## Architecture
 
+An experimental SwiftUI/iOS host lives in a separate optional module. See
+[the iOS implementation preview](docs/ios-host.md) for its build API, verified
+Simulator results and remaining device/platform-service gates. It does not
+change the Android entry point.
+
 There is one `abla_mobile_run()` call per Android process. A `$mobile` template
 becomes an ordinary capturing `FnMut` state machine, so it owns any number of
 ordinary Abla variables for its entire lifetime. `mobileRun` handles event

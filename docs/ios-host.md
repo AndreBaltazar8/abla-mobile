@@ -1,0 +1,123 @@
+# iOS host: implementation preview
+
+This feature branch contains a SwiftUI host for protocol v1. It is not an iOS
+release, an App Store submission, or proof on a physical device. Android-only
+callers retain the existing entry point; iOS build helpers are explicit package
+submodules and need the compiler release containing the iOS target APIs.
+
+## Build boundary
+
+`import "abla-mobile/ios_slices"` exposes
+`mobileBuildIosSlices(name, entry, outputDirectory, fast = true, cache = true)`.
+It registers both targets and stages two static-library builds:
+
+- `ios-arm64/libabla_app.a`: device, minimum iOS17.
+- `ios-arm64-simulator/libabla_app.a`: arm64 Simulator, minimum iOS17.
+
+`import "abla-mobile/ios_build"` additionally exposes
+`mobileIosConfiguration(name, entry, outputDirectory, headersDirectory)` and
+`mobileBuildIos(configuration)`. The default configuration requests fast,
+cached builds and `AblaApp.xcframework` packaging. The compiler packages only
+after both child archives succeed. A true compile-time return means the build
+request was accepted, not that the artifacts already exist. Packaging requires
+macOS/Xcode; Linux receives `E_IOS_XCFRAMEWORK_HOST`. The slices-only helper
+does not request packaging.
+
+Register targets and stage builds in the same compile function, rather than
+separate evaluated globals. SDK overrides are `ABLA_APPLE_SDK_IPHONEOS` and
+`ABLA_APPLE_SDK_IPHONESIMULATOR`. Each object, including the Darwin adapter,
+must target the matching iOS platform; a macOS object is not an iOS substitute.
+
+An application imports `abla-mobile/ios_runtime` to export its protocol query,
+and exports its long-lived entry as `abla_mobile_run`. See
+`tests/native/mobile_loop_ios.ab` and One's `tests/ios_backend_exports.ab`.
+Use `runtime/ios-host/AppHeaders` as the application archive headers directory.
+The Swift package supplies the separate C host/support objects. The compiler
+archive contains the Abla application/runtime and Darwin adapter, not the host.
+
+## Host contract
+
+The `runtime/ios-host` Swift package provides `AblaMobileRoot` and
+`MobileRuntimeStore`; `Templates/App.swift` is a minimal embedding template.
+The sample Xcode project demonstrates linkage. Its fake
+producer is a component fixture, and must be excluded when linking an actual
+application archive.
+
+The host owns one background runtime thread, while SwiftUI and platform services
+run on the main actor. Both the application protocol query and the application
+entry execute inside the checked boundary on that same runtime thread. Do not
+call the query from UIKit: exported Abla functions can initialize globals.
+All buffers crossing the ABI are copied, bounded pointer/length pairs. No host
+view retains an Abla pointer. The process singleton cannot restart after stop.
+
+Events retain the revision and route identity of the rendered view. Valid
+older events in the same presentation are passed unchanged to One's existing
+event-map fence. Future revisions and old-route actions are refused. Root/route
+identity changes clear pending editor state. UTF-8 byte identity is used for
+node keys and editor replacements; Swift's canonical String equivalence must
+not merge distinct application values. Secure fields disable correction,
+capitalization and spelling suggestions. Secure multiline explicitly refuses.
+
+Snapshot, event, request and response limits are explicit in the C header and
+Swift models. Full queues refuse admission rather than silently dropping or
+replaying actions. Failure readers expose fixed codes; snapshots and editor
+values are not logged.
+
+## Platform services and open gates
+
+The current implementation includes timer completion, explicit Keychain
+STOREGET/STORESET/STOREDEL, system document picking into an opaque bounded vault,
+and URLSession HTTPS with system trust and redirects disabled. Network errors
+return a fixed outcome-unknown code, with no host retry. Application body,
+credentials, URLs and raw error descriptions are not placed in errors.
+
+Multipart, file-backed request bodies, binary/save-to-file responses, rich
+media, native games, WebView, native file-save/share effects and complete
+styling/accessibility parity are not
+implemented. Unsupported services/components refuse visibly. Platform-service
+journeys are a separate CI gate; source compilation does not establish them.
+No ordinary input is implicitly persisted in Keychain or editor recovery.
+
+## Evidence
+
+- [42143525951](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42143525951):
+  actual One application archives, One44/44 and two Simulator journeys on
+  compiler0ee1fac6; fake producer excluded from the app link.
+- [42148143605](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42148143605):
+  same application/host inputs, compiler1476e951 with packaging/capability
+  integration; One44/44 and both actual application journeys passed.
+- [42146689330](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42146689330):
+  failed component regression: explicit NFC-to-NFD model replacement did not
+  reach the native editor bytes.
+- [42148217613](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42148217613):
+  corrected exact-byte secure editor, model/ABI/SwiftUI gates and all three
+  component journeys passed. This result uses a fake producer.
+- [42149851610](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42149851610):
+  actual Abla One application also passes the exact Unicode journey, plus the
+  two earlier journeys and all44 One contract suites on compiler1476e951.
+
+The first platform-service run42149399602 failed Keychain deletion and cold
+picker presentation. Run42151222532 passed the Keychain roundtrip after giving
+the disposable Simulator fixture explicit entitlements, but exposed a pending
+request after picker cancellation; it remains failed. The correction uses
+SwiftUI's separate iOS17 `onCancellation` callback. Neither failed run reached
+the local HTTPS acceptance steps. The Simulator's linked entitlement section
+is distinct from the ad-hoc signature's entitlement dictionary.
+
+[42152645707](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42152645707)
+passed the corrected service gate: five ordinary Simulator journeys (including
+Keychain roundtrip and picker cancellation), unknown-CA refusal before installing
+a disposable CA, then trusted HTTPS/redirect refusal/lost-answer handling.
+The peer recorded one successful GET, one302 and one POST whose answer was lost,
+with zero redirected requests or replays. Linked Simulator entitlements were
+read from the actual Mach-O section; malformed-reader controls were refused.
+This gate uses a fake application producer with the real host/platform services.
+
+See Apple's [fileImporter cancellation API](https://developer.apple.com/documentation/swiftui/view/fileimporter(ispresented:allowedcontenttypes:allowsmultipleselection:oncompletion:oncancellation:))
+and [Keychain entitlement diagnosis](https://developer.apple.com/documentation/security/errsecmissingentitlement).
+The fixture identity is local to the disposable Simulator. It supplies no Apple
+developer team or device provisioning profile.
+
+Simulator memory and successful archive linkage do not establish physical
+iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
+on a device and publication need their own approval and evidence.

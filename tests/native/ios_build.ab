@@ -3,7 +3,7 @@
 import "../../src/ios_build.ab"
 val accepted = #mobileBuildIos(mobileIosConfiguration(
     "mobile-ios-loop", "tests/native/mobile_loop_ios.ab", "build/ios-native-loop",
-    "runtime/ios-host/Sources/CAblaMobile/include"
+    "runtime/ios-host/AppHeaders"
 ))
 fun main(): int {
     if (!accepted) return 1

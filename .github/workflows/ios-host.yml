@@ -153,6 +153,8 @@ jobs:
           codesign --display --verbose=2 \
             "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app" \
             > "$RUNNER_TEMP/ios-ui-evidence/simulator-signature.txt" 2>&1
+          codesign --verify --strict \
+            "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app"
           node runtime/ios-host/Tests/simulator-entitlements.test.mjs
           node runtime/ios-host/Tests/simulator-entitlements.mjs \
             "$RUNNER_TEMP/ios-smoke-build/Build/Products/Debug-iphonesimulator/HostSmoke.app/HostSmoke" \
