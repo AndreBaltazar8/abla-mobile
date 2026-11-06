@@ -27,43 +27,22 @@ jobs:
           ref: d914f6f1fb1023bf4fddfbb2c92e7f24f8987cbc
           path: abla-one
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: AndreBaltazar8/ablac
-          ref: 1476e951da6ded13f973ab777dcb002d2eaebb3b
-          path: ablac
-          persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
         with:
-          version: 0.2.46
-      - name: Build exact compiler source with iOS targets and Darwin symlink repair
-        working-directory: ablac
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ios-real-evidence"
-          brew install --force-bottle llvm@23 lld@23 openssl@3 binaryen
-          export PATH="$(brew --prefix llvm@23)/bin:$(brew --prefix lld@23)/bin:$(brew --prefix openssl@3)/bin:$PATH"
-          export ABLA_SYSROOT="$PWD"
-          tools/bootstrap-compiler.sh build/ci/bootstrap-ablac \
-            2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/bootstrap.log"
-          tools/build-self-hosted-current.sh build/ci/bootstrap-ablac build/ci/ablac-stage1 \
-            2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/stage1.log"
-          tools/build-self-hosted-current.sh build/ci/ablac-stage1 build/ci/ablac-stage2 \
-            2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/stage2.log"
-          echo "ABLA_SYSROOT=$PWD" >> "$GITHUB_ENV"
-          for tool in llvm@23 lld@23 openssl@3; do echo "$(brew --prefix "$tool")/bin" >> "$GITHUB_PATH"; done
+          version: 0.2.47
+      - name: Prepare evidence directory
+        run: mkdir -p "$RUNNER_TEMP/ios-real-evidence"
       - name: Record exact source and compiler provenance
         shell: bash
         run: |
           set -euo pipefail
           {
-            for repo in abla-mobile abla-one ablac; do git -C "$repo" rev-parse HEAD; done
+            for repo in abla-mobile abla-one; do git -C "$repo" rev-parse HEAD; done
             sw_vers; xcodebuild -version; swift --version
-            ablac/build/ci/ablac-stage2 --version
-            shasum -a 256 ablac/build/ci/ablac-stage2
+            ablac --version
+            shasum -a 256 "$(command -v ablac)"
           } | tee "$RUNNER_TEMP/ios-real-evidence/versions.txt"
-      - name: Run all One contracts with the fixed compiler
+      - name: Run all One contracts with released 0.2.47
         id: contracts
         continue-on-error: true
         working-directory: abla-one
@@ -71,8 +50,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          ../ablac/build/ci/ablac-stage2 build tools/check-native-build-roots.ab -o build/check-native-build-roots --fast
-          ../ablac/build/ci/ablac-stage2 test tests/unit/*.ab tests/backends/*.ab tests/integration/*.ab \
+          ablac build tools/check-native-build-roots.ab -o build/check-native-build-roots --fast
+          ablac test tests/unit/*.ab tests/backends/*.ab tests/integration/*.ab \
             tests/remote/client.ab tests/remote/routes.ab \
             2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/one-contracts.log"
       - name: Build actual One application archives for both iOS slices
@@ -80,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ../ablac/build/ci/ablac-stage2 build tests/ios_xcframework.ab -o build/ios-driver --fast --no-cache \
+          ablac build tests/ios_xcframework.ab -o build/ios-driver --fast --no-cache \
             2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/ios-archives.log"
           build/ios-driver
           for target in ios-arm64 ios-arm64-simulator; do
