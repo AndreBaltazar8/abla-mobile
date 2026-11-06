@@ -18,18 +18,18 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 5c07ea4111f0e2ae8134003e439227981ee6cb6d
+          ref: 6d9cfaf574031729d2426565c47bad9c20712a47
           path: abla-mobile
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AndreBaltazar8/abla-one
-          ref: 5e9dcab71c077bf3a95505a22c03d6197d93a5d5
+          ref: 0ab017ff459d71c603c0b649cdd5739b3bae8ef6
           path: abla-one
           persist-credentials: false
       - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
         with:
-          version: 0.2.47
+          version: 0.2.48
       - name: Prepare evidence directory
         run: mkdir -p "$RUNNER_TEMP/ios-real-evidence"
       - name: Record exact source and compiler provenance
@@ -42,13 +42,15 @@ jobs:
             ablac --version
             shasum -a 256 "$(command -v ablac)"
           } | tee "$RUNNER_TEMP/ios-real-evidence/versions.txt"
-      - name: Run all One contracts with released 0.2.47
+      - name: Run all One contracts with released 0.2.48
         id: contracts
         continue-on-error: true
         working-directory: abla-one
         shell: bash
         run: |
           set -euo pipefail
+          ablac package update --project .
+          git diff --exit-code -- abla.lock
           mkdir -p build
           ablac build tools/check-native-build-roots.ab -o build/check-native-build-roots --fast
           ablac test tests/unit/*.ab tests/backends/*.ab tests/integration/*.ab \
