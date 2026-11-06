@@ -1,6 +1,6 @@
 # iOS host: implementation preview
 
-This feature branch contains a SwiftUI host for protocol v1. It is not an iOS
+The public library includes a SwiftUI host for protocol v1. It is not an iOS
 release, an App Store submission, or proof on a physical device. Android-only
 callers retain the existing entry point; iOS build helpers are explicit package
 submodules and require ablac0.2.47 or newer.
@@ -12,12 +12,12 @@ Package consumers use an explicit revision-pinned provider, for example:
 ```abla
 compile fun mobileSource(): ImportSource = gitImportSource(
     "abla-mobile", "https://github.com/AndreBaltazar8/abla-mobile.git", "rev",
-    "65555622d38f8db8a614b512126db07da0dddc9e")
+    "6d9cfaf574031729d2426565c47bad9c20712a47")
 import importSubpath(mobileSource(), "ios_slices")
 ```
 
-The revision above is an implementation-preview feature commit, not a stable
-release. A bare `import "abla-mobile/ios_slices"` is an importer-relative path;
+The revision above is the published implementation-preview source, not a
+stable iOS application release. A bare `import "abla-mobile/ios_slices"` is an importer-relative path;
 it does not resolve a named package automatically. All providers requesting
 `abla-mobile` in one graph must use the same source and revision.
 
@@ -218,4 +218,32 @@ client under the isolated fixture; it does not prove the earlier failure cause.
 
 Simulator memory and successful archive linkage do not establish physical
 iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
-on a device and publication need their own approval and evidence.
+on a device and application distribution need their own approval and evidence.
+
+## Public provider on released 0.2.48
+
+One's published provider `9f345517e9fe24ba6c0f9ca745d6d166da7e2aa1` locks the
+Mobile revision above. Fresh consumers of that provider require ablac0.2.48
+(the package-path normalization fix); the Mobile-only iOS build API itself
+remains available from0.2.47. Providers in one graph must agree exactly on the
+Mobile URL/revision; there is no root-wins override. One's development manifest
+seeds its optional backend graph and CI requires package-update lock stability.
+
+[One Mac42191583596](https://github.com/AndreBaltazar8/abla-one/actions/runs/42191583596)
+passed fresh public resolution before workspace checkouts, all44 contracts,
+both actual iOS archives/xcframework and five real SwiftUI Simulator journeys
+on official0.2.48.
+[One Linux42191583593](https://github.com/AndreBaltazar8/abla-one/actions/runs/42191583593)
+passed the full host/HTTP suite and nine Mobile core groups.
+[Mobile42191792122](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42191792122)
+independently passed all44 contracts, both archives/xcframework and the five
+actual-app journeys (82.675s). No device install or physical-device claim follows.
+
+The separate component job42191791995 remains failed:24 model tests, both ABI
+and SwiftUI slices, seven ordinary UI journeys and unknown-CA refusal passed,
+then xcodebuild could not find the freshly requested trusted Simulator before
+running that app testcase. Its boot-status output ended4294967295. This is not
+a production trust-policy attribution. The full workflow now applies the
+already accepted focused fixture's zero-then-one booted-Simulator isolation;
+the client, TLS policy, assertions and request deadline are unchanged. The
+replacement full component gate is pending, and earlier failures remain failed.
