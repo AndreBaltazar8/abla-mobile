@@ -1,0 +1,11 @@
+// Provisional552 integration fixture, excluded from the released045/046 gates
+// until the compiler's actual iOS build APIs have landed in a usable candidate.
+import "../../src/ios_build.ab"
+val accepted = #mobileBuildIos(mobileIosConfiguration(
+    "mobile-ios-loop", "tests/native/mobile_loop_ios.ab", "build/ios-native-loop",
+    "runtime/ios-host/Sources/CAblaMobile/include"
+))
+fun main(): int {
+    if (!accepted) return 1
+    0
+}

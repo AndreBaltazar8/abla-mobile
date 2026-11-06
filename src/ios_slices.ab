@@ -1,0 +1,21 @@
+// Low-level slices only, usable before the staged xcframework API is released.
+import "abla/build"
+import "abla/ios/build"
+
+compile fun mobileBuildIosSlices(
+    name: string, entry: string, outputDirectory: string,
+    fast: bool = true, cache: bool = true
+): bool {
+    if (name == "" || entry == "" || outputDirectory == "") return false
+    val device = iosDeviceTarget()
+    val simulator = iosSimulatorTarget()
+    var accepted = buildProgram(
+        "$name-ios-device", entry, "$outputDirectory/ios-arm64/libabla_app.a",
+        device, "static-library", fast, cache
+    )
+    if (accepted) accepted = buildProgram(
+        "$name-ios-simulator", entry, "$outputDirectory/ios-arm64-simulator/libabla_app.a",
+        simulator, "static-library", fast, cache
+    )
+    accepted
+}

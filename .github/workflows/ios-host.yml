@@ -98,12 +98,25 @@ jobs:
           device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
             "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
           test -n "$device" && test "$device" != null
+          set +e
           xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
             -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
             -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-smoke-build" \
             -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HostSmoke.xcresult" \
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          if test "$result" -ne 0; then
+            xcrun simctl list devices available -j > "$RUNNER_TEMP/ios-ui-evidence/devices-after-failure.json"
+            xcrun simctl spawn "$device" log show --last 3m --style compact \
+              --predicate 'process == "HostSmoke"' \
+              > "$RUNNER_TEMP/ios-ui-evidence/app-after-failure.log" 2>&1 || true
+            mkdir -p "$RUNNER_TEMP/ios-ui-evidence/crashes"
+            find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f -name 'HostSmoke*' \
+              -exec cp {} "$RUNNER_TEMP/ios-ui-evidence/crashes/" \; || true
+          fi
+          exit "$result"
       - name: Retain presentation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

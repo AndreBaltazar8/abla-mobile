@@ -44,6 +44,9 @@ and a real Abla-linked Simulator journey are separate gates.
 Every iOS application entry imports `src/ios_runtime.ab` (the One iOS backend
 does so). It exports `abla_mobile_application_protocol_version` **from the
 application archive**. A missing query is a link failure; a mismatched version
-is refused before the runtime starts. The separate host-owned iOS ABI marker
+is refused before the application run begins. The query executes on the same
+runtime thread, inside the iOS checked panic boundary: an exported Abla query
+may initialize globals and must not do so on UIKit's thread. UI/event admission
+and tree publication remain closed until the query succeeds. The separate host-owned iOS ABI marker
 does not substitute for this application query. The iOS loop build fixture is
 `tests/native/mobile_loop_ios.ab`, which adds it to the generic loop fixture.

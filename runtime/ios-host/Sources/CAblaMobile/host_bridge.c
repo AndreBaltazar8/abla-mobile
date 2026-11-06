@@ -26,6 +26,7 @@ static struct {
     pthread_cond_t available;
     bool started, accepting, needs_pump;
     _Atomic bool closing;
+    _Atomic bool application_ready;
     _Atomic int state;
     _Atomic int failure;
     Event events[EVENT_COUNT], current;
@@ -159,6 +160,7 @@ static void pump_platform(void) {
 }
 static int64_t scalar_call(void *context, int64_t value) {
     (void)context;
+    if (!atomic_load(&host.application_ready)) { protocol_failure(); return -1; }
     if (value == ABLA_MOBILE_TREE_BEGIN) {
         wipe(host.working, host.working_size); host.working_size = 0;
         host.working_valid = !atomic_load(&host.closing);
@@ -222,7 +224,7 @@ static void *runtime_thread(void *unused) {
     pthread_mutex_lock(&host.mutex);
     const bool expected = atomic_load(&host.closing);
     host.accepting = false;
-    if (!expected) atomic_store(&host.failure, result == 1 ? 3 : 4);
+    if (!expected && !atomic_load(&host.failure)) atomic_store(&host.failure, result == 1 ? 3 : 4);
     for (size_t index = 0; index < EVENT_COUNT; index++) {
         free_bytes(host.events[index].data, host.events[index].size); host.events[index] = (Event){0};
     }
@@ -243,9 +245,23 @@ static void *runtime_thread(void *unused) {
     atomic_store(&host.state, expected && !atomic_load(&host.failure) ? ABLA_IOS_STOPPED : ABLA_IOS_FAILED);
     return NULL;
 }
+/* The iOS-only panic shim calls this entry inside its checked boundary. Even
+ * a pure exported Abla query may initialize application globals, so it MUST
+ * run on the same runtime thread as the application, never on UIKit's thread. */
+int64_t abla_ios_checked_entry(void) {
+    if (abla_mobile_application_protocol_version() != ABLA_MOBILE_PROTOCOL_VERSION) {
+        atomic_store(&host.failure, 5);
+        return 0;
+    }
+    pthread_mutex_lock(&host.mutex);
+    if (atomic_load(&host.closing)) { pthread_mutex_unlock(&host.mutex); return 0; }
+    atomic_store(&host.application_ready, true);
+    host.accepting = true;
+    pthread_mutex_unlock(&host.mutex);
+    return abla_mobile_run();
+}
 int64_t abla_ios_start_v1(void) {
-    if (abla_mobile_ios_abi_version() != ABLA_MOBILE_IOS_ABI_VERSION ||
-        abla_mobile_application_protocol_version() != ABLA_MOBILE_PROTOCOL_VERSION) return -1;
+    if (abla_mobile_ios_abi_version() != ABLA_MOBILE_IOS_ABI_VERSION) return -1;
     pthread_mutex_lock(&host.mutex);
     if (host.started || atomic_load(&host.closing)) { pthread_mutex_unlock(&host.mutex); return 0; }
     host.started = true;
@@ -253,7 +269,7 @@ int64_t abla_ios_start_v1(void) {
         atomic_store(&host.failure, 1); atomic_store(&host.state, ABLA_IOS_FAILED);
         pthread_mutex_unlock(&host.mutex); return -1;
     }
-    host.accepting = true; atomic_store(&host.state, ABLA_IOS_RUNNING);
+    atomic_store(&host.state, ABLA_IOS_RUNNING);
     pthread_t thread;
     if (pthread_create(&thread, NULL, runtime_thread, NULL) != 0) {
         host.accepting = false; atomic_store(&host.failure, 1); atomic_store(&host.state, ABLA_IOS_FAILED);

@@ -3,6 +3,7 @@
 #include "abla_mobile_app.h"
 #include <assert.h>
 #include <stdatomic.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -12,7 +13,11 @@ extern int64_t abla_mobile_http_request(const char *, const char *, const char *
 static _Atomic int stage;
 static int bad_frame;
 static int bad_version;
-int64_t abla_mobile_application_protocol_version(void) { return bad_version ? 2 : 1; }
+static pthread_t main_thread;
+int64_t abla_mobile_application_protocol_version(void) {
+    assert(!pthread_equal(main_thread, pthread_self()));
+    return bad_version ? 2 : 1;
+}
 static void pause_briefly(void) { struct timespec wait = {0, 1000000}; nanosleep(&wait, NULL); }
 static void await_stage(int wanted) {
     for (int attempt = 0; attempt < 5000 && atomic_load(&stage) < wanted; attempt++) pause_briefly();
@@ -51,13 +56,16 @@ int64_t abla_mobile_run(void) {
     return 0;
 }
 int main(int argc, char **argv) {
+    main_thread = pthread_self();
     (void)argv;
     if (argc > 1) {
         if (strcmp(argv[1], "--bad-version") == 0) {
             bad_version = 1;
-            assert(abla_ios_start_v1() == -1);
-            assert(abla_ios_state_v1() == ABLA_IOS_IDLE);
-            puts("PASS native bridge: mismatched application protocol refused before runtime start");
+            assert(abla_ios_start_v1() == 1);
+            for (int i = 0; i < 5000 && abla_ios_state_v1() != ABLA_IOS_FAILED; i++) pause_briefly();
+            assert(abla_ios_state_v1() == ABLA_IOS_FAILED && abla_ios_failure_v1() == 5);
+            assert(atomic_load(&stage) == 0);
+            puts("PASS native bridge: mismatched protocol refused before application run, query on runtime thread");
             return 0;
         }
         bad_frame = 1;

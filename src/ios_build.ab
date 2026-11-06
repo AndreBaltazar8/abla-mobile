@@ -1,0 +1,44 @@
+// Explicit package submodule: applications that only build Android do not
+// import the provisional compiler iOS API. Requires the release containing552.
+import "abla/ios/build"
+import "ios_slices.ab"
+
+class MobileIosConfiguration(
+    val name: string,
+    val entry: string,
+    val outputDirectory: string,
+    val headersDirectory: string,
+    val fast: bool,
+    val cache: bool,
+    val createXcframework: bool
+)
+
+compile fun mobileIosConfiguration(
+    name: string,
+    entry: string,
+    outputDirectory: string,
+    headersDirectory: string
+): MobileIosConfiguration = MobileIosConfiguration(
+    name, entry, outputDirectory, headersDirectory, true, true, true
+)
+
+// Compiler target registrations and buildProgram calls intentionally share one
+// compile function. Separate CT global initializers can register a target twice.
+// Accepted child/packaging requests execute later; true does not mean the
+// archives or xcframework have already been produced during this CT call.
+compile fun mobileBuildIos(configuration: MobileIosConfiguration): bool {
+    if (configuration.name == "" || configuration.entry == "" ||
+        configuration.outputDirectory == "" || configuration.headersDirectory == "") return false
+    val root = configuration.outputDirectory
+    val deviceArchive = "$root/ios-arm64/libabla_app.a"
+    val simulatorArchive = "$root/ios-arm64-simulator/libabla_app.a"
+    var accepted = mobileBuildIosSlices(
+        configuration.name, configuration.entry, root,
+        configuration.fast, configuration.cache
+    )
+    if (accepted && configuration.createXcframework) accepted = iosCreateXcframework(
+        "$root/AblaApp.xcframework", [deviceArchive, simulatorArchive],
+        configuration.headersDirectory
+    )
+    accepted
+}

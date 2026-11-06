@@ -1,0 +1,8 @@
+import "../../src/ios_slices.ab"
+val accepted = #mobileBuildIosSlices(
+    "mobile-ios-loop", "tests/native/mobile_loop_ios.ab", "build/ios-native-loop", true, false
+)
+fun main: int {
+    if (!accepted) return 1
+    0
+}
