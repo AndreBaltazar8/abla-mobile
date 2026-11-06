@@ -61,13 +61,17 @@ import CAblaMobile
         case .failure: completion?(nil)
         }
     }
-    @discardableResult public func send(_ identifier: Int64, revision: Int64,
+    @discardableResult public func send(_ identifier: Int64, revision: Int64, identity: String,
                                        payload: String = "", change: Bool = false) -> Bool {
-        guard tree?.revision == revision, revision > 0, failure == nil, identifier > 0,
+        guard tree?.admitsEvent(revision: revision, identity: identity, identifier: identifier) == true,
+              failure == nil,
               payload.utf8.count <= Int(ABLA_IOS_EVENT_LIMIT) else { return false }
-        return Array(payload.utf8).withUnsafeBufferPointer {
-            abla_ios_event_v1(revision, identifier, $0.baseAddress, Int64($0.count), change ? 1 : 0) == 1
+        let result = Array(payload.utf8).withUnsafeBufferPointer {
+            abla_ios_event_v1(revision, identifier, $0.baseAddress, Int64($0.count), change ? 1 : 0)
         }
+        if result == 0 { notice = "event_queue_full" }
+        else if result == 1 && notice == "event_queue_full" { notice = nil }
+        return result == 1
     }
     private func readSnapshot() {
         guard failure == nil else { return }

@@ -55,6 +55,11 @@ public struct OneTree: Equatable, Sendable, CustomStringConvertible {
     public var presentationIdentity: String {
         "\(root.key.utf8.count):\(root.key)|\(root.attribute("one.entry"))"
     }
+    public func admitsEvent(revision rendered: Int64, identity: String, identifier: Int64) -> Bool {
+        // Keep the actual rendered revision. One's existing recent-event map
+        // resolves valid delayed actions; never retag them as the newest tree.
+        rendered > 0 && rendered <= revision && identifier > 0 && identity == presentationIdentity
+    }
     public var description: String { "OneTree(revision: \(revision), content: redacted)" }
 
     public static func decode(_ data: Data) throws -> OneTree {

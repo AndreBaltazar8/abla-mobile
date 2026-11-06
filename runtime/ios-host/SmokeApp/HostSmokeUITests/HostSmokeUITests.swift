@@ -32,7 +32,13 @@ import XCTest
         field.typeText("s3crEt")
         XCTAssertTrue(app.staticTexts["editing"].waitForExistence(timeout: 5))
         app.buttons["accept"].tap()
-        XCTAssertTrue(app.staticTexts["accepted_exact"].waitForExistence(timeout: 5))
+        let accepted = app.staticTexts["accepted_exact"].waitForExistence(timeout: 5)
+        if !accepted {
+            // This fixture's status is a closed enum, never an editor value.
+            let label = app.staticTexts["status"].label
+            let safe = ["ready", "editing", "refused", "new_route", "ignore_mode", "timer_ready"].contains(label) ? label : "other"
+            XCTFail("Exact action not observed; fixture status=" + safe)
+        }
         XCTAssertFalse(app.staticTexts["disabled_button_sent"].exists)
         XCTAssertFalse(app.staticTexts["runtime.failure"].exists)
         // Values are not printed, put in attachments or used as screenshot names.

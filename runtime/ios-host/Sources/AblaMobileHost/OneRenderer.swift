@@ -15,7 +15,7 @@ public struct AblaMobileRoot: View {
                 NavigationStack {
                     ZStack {
                         (OneRGBA(tree.background)?.swiftColor ?? Color(uiColor: .systemBackground)).ignoresSafeArea()
-                        OneNodeView(node: tree.root, revision: tree.revision, store: store)
+                        OneNodeView(node: tree.root, revision: tree.revision, identity: tree.presentationIdentity, store: store)
                             .id(tree.presentationIdentity)
                     }
                         .navigationTitle(tree.showTopBar ? tree.title : "")
@@ -39,10 +39,11 @@ public struct AblaMobileRoot: View {
 @MainActor private struct OneNodeView: View {
     let node: OneNode
     let revision: Int64
+    let identity: String
     @ObservedObject var store: MobileRuntimeStore
     private var gap: CGFloat { CGFloat(max(0, min(256, node.number("gap", default: 8)))) }
     private var children: some View {
-        ForEach(node.children) { child in AnyView(OneNodeView(node: child, revision: revision, store: store)) }
+        ForEach(node.children) { child in AnyView(OneNodeView(node: child, revision: revision, identity: identity, store: store)) }
     }
     // Container identifiers propagate to descendants in SwiftUI and would
     // replace every editor/button's own key. Assign identity on controls only.
@@ -63,17 +64,17 @@ public struct AblaMobileRoot: View {
                 .font(.system(size: CGFloat(max(8, min(96, node.number("size", default: 16))))))
                 .accessibilityIdentifier(node.key)
         case "one.pressable", "one.link", "button":
-            Button { _ = store.send(node.event("onPress"), revision: revision) } label: {
+            Button { _ = store.send(node.event("onPress"), revision: revision, identity: identity) } label: {
                 if node.children.isEmpty { Text(node.attribute("text", default: node.value("text"))) }
                 else { VStack(spacing: gap) { children } }
             }.disabled(node.attribute("enabled") == "false" || node.event("onPress") == 0)
                 .buttonStyle(OneControlStyle(node: node))
                 .accessibilityIdentifier(node.key)
-        case "one.input": OneInputView(node: node, revision: revision, store: store).id(node.key).accessibilityIdentifier(node.key)
+        case "one.input": OneInputView(node: node, revision: revision, identity: identity, store: store).id(node.key).accessibilityIdentifier(node.key)
         case "one.spacer", "spacer": Spacer(minLength: 0)
         case "one.divider", "divider": Divider()
         case "one.native":
-            if let fallback = node.children.last { AnyView(OneNodeView(node: fallback, revision: revision, store: store)) }
+            if let fallback = node.children.last { AnyView(OneNodeView(node: fallback, revision: revision, identity: identity, store: store)) }
             else { Text("Unsupported native content") }
         default: Text("Unsupported component: \(node.type)").accessibilityIdentifier("runtime.unsupported")
         }
@@ -83,13 +84,14 @@ public struct AblaMobileRoot: View {
 @MainActor private struct OneInputView: View {
     let node: OneNode
     let revision: Int64
+    let identity: String
     @ObservedObject var store: MobileRuntimeStore
     @State private var editing: String
     @State private var echoes: InputEchoes
     @State private var expired: UInt64?
     @FocusState private var focused: Bool
-    init(node: OneNode, revision: Int64, store: MobileRuntimeStore) {
-        self.node = node; self.revision = revision; self.store = store
+    init(node: OneNode, revision: Int64, identity: String, store: MobileRuntimeStore) {
+        self.node = node; self.revision = revision; self.identity = identity; self.store = store
         let initial = node.attribute("value")
         _editing = State(initialValue: initial)
         _echoes = State(initialValue: InputEchoes(initial: initial))
@@ -114,7 +116,7 @@ public struct AblaMobileRoot: View {
             let event = node.event("onChange")
             guard event > 0 else { editing = next; return }
             var proposed = echoes
-            guard proposed.changed(next), store.send(event, revision: revision, payload: next, change: true) else { return }
+            guard proposed.changed(next), store.send(event, revision: revision, identity: identity, payload: next, change: true) else { return }
             echoes = proposed; editing = next
         })
     }
@@ -138,7 +140,7 @@ public struct AblaMobileRoot: View {
         .keyboardType(keyboard)
         .modifier(OneDecoration(node: node, focused: focused))
         .disabled(node.attribute("enabled") == "false")
-        .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision); focused = false }
+        .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity); focused = false }
         .onChange(of: model) { _, next in accept(next) }
         .onChange(of: focused) { _, _ in accept(model) }
         .task(id: echoes.generation) {

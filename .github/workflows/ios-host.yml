@@ -98,6 +98,10 @@ jobs:
           device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
             "$RUNNER_TEMP/ios-ui-evidence/simulators.json")
           test -n "$device" && test "$device" != null
+          if test "$(jq -r --arg id "$device" '.devices[][] | select(.udid == $id) | .state' "$RUNNER_TEMP/ios-ui-evidence/simulators.json")" = Shutdown; then
+            xcrun simctl boot "$device"
+          fi
+          xcrun simctl bootstatus "$device" -b
           set +e
           xcodebuild test -project runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
             -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \

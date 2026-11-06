@@ -9,6 +9,10 @@ final class OneTreeTests: XCTestCase {
         let moved = try OneTree.decode(wire(node(properties: ["a.one.entry": "2"]), revision: 3))
         XCTAssertEqual(first.presentationIdentity, echo.presentationIdentity)
         XCTAssertNotEqual(first.presentationIdentity, moved.presentationIdentity)
+        XCTAssertTrue(echo.admitsEvent(revision: 1, identity: first.presentationIdentity, identifier: 7))
+        XCTAssertFalse(moved.admitsEvent(revision: 1, identity: first.presentationIdentity, identifier: 7))
+        XCTAssertFalse(first.admitsEvent(revision: 2, identity: first.presentationIdentity, identifier: 7))
+        XCTAssertFalse(first.admitsEvent(revision: 1, identity: first.presentationIdentity, identifier: 0))
     }
     func testTextNumbersCannotSupplyNonFiniteLayoutValues() throws {
         for raw in ["nan", "inf", "-inf", "1e999"] {
