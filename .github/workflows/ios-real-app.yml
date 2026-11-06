@@ -64,6 +64,8 @@ jobs:
             shasum -a 256 ablac/build/ci/ablac-stage2
           } | tee "$RUNNER_TEMP/ios-real-evidence/versions.txt"
       - name: Run all One contracts with the fixed compiler
+        id: contracts
+        continue-on-error: true
         working-directory: abla-one
         shell: bash
         run: |
@@ -115,6 +117,16 @@ jobs:
               > "$RUNNER_TEMP/ios-real-evidence/app-after-failure.log" 2>&1 || true
           fi
           exit "$result"
+      - name: Keep a failed One contract run authoritative
+        if: always()
+        shell: bash
+        env:
+          CONTRACT_OUTCOME: ${{ steps.contracts.outcome }}
+        run: |
+          if test "$CONTRACT_OUTCOME" != success; then
+            echo 'One contracts did not pass; independent application evidence does not make the full gate green.' >&2
+            exit 1
+          fi
       - name: Retain actual application evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
