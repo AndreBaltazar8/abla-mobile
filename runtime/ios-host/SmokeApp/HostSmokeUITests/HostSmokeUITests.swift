@@ -1,6 +1,39 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    func testEmptyFileFilterOpensSystemPickerAndCancellationCompletes() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["pick"].tap()
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.tap()
+        XCTAssertTrue(app.staticTexts["picker_cancel_passed"].waitForExistence(timeout: 5))
+    }
+    // These two require the CI-local HTTPS peer. The ordinary UI step excludes
+    // them, then separate steps run before and after installing its private CA
+    // in the disposable Simulator trust store. Production trust code is unchanged.
+    func testHttpsRefusesUnknownCertificateAuthority() {
+        let app = XCUIApplication()
+        app.launchEnvironment["ABLA_HOST_TEST_UNTRUSTED"] = "1"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["https"].tap()
+        XCTAssertTrue(app.staticTexts["https_untrusted_refused"].waitForExistence(timeout: 20))
+    }
+    func testHttpsUsesSystemTrustWithoutRedirectOrLostAnswerReplay() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["https"].tap()
+        XCTAssertTrue(app.staticTexts["https_system_trust_roundtrip_passed"].waitForExistence(timeout: 25))
+    }
+    func testExplicitKeychainStoreReadDeleteRoundtrip() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["keychain"].tap()
+        XCTAssertTrue(app.staticTexts["keychain_roundtrip_passed"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["runtime.failure"].exists)
+    }
     func testApplicationReplacementPreservesExactUnicodeBytes() {
         let app = XCUIApplication(); app.launch()
         XCTAssertTrue(app.secureTextFields["secure"].waitForExistence(timeout: 15))

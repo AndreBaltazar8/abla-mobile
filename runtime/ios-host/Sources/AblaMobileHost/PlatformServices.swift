@@ -106,7 +106,8 @@ import AblaMobileModel
                   let options = try? JSONSerialization.jsonObject(with: Data(url.utf8)) as? [String: Any] else {
                 finish(id, error: "invalid_picker"); return
             }
-            let mimes = options["mime"] as? [String] ?? ["*/*"]
+            let requested = options["mime"] as? [String] ?? []
+            let mimes = requested.isEmpty ? ["*/*"] : requested
             guard mimes.count <= 16, mimes.allSatisfy({ $0.utf8.count <= 128 }) else {
                 finish(id, error: "invalid_picker"); return
             }

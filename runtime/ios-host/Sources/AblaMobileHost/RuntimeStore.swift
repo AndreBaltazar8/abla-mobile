@@ -33,7 +33,16 @@ import CAblaMobile
             }
         }, pick: { [weak self] mimes, multiple, completion in
             guard let self, self.pickerCompletion == nil else { return false }
-            let types = mimes.compactMap { $0 == "*/*" ? UTType.data : UTType(mimeType: $0) }
+            let types = mimes.compactMap { mime -> UTType? in
+                switch mime {
+                case "*/*", "application/*": .data
+                case "image/*": .image
+                case "text/*": .text
+                case "audio/*": .audio
+                case "video/*": .movie
+                default: UTType(mimeType: mime)
+                }
+            }
             guard !types.isEmpty else { return false }
             self.fileTypes = types; self.multipleFiles = multiple
             self.pickerCompletion = completion; self.pickingFile = true
