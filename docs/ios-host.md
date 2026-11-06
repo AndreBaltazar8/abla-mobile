@@ -246,4 +246,14 @@ running that app testcase. Its boot-status output ended4294967295. This is not
 a production trust-policy attribution. The full workflow now applies the
 already accepted focused fixture's zero-then-one booted-Simulator isolation;
 the client, TLS policy, assertions and request deadline are unchanged. The
-replacement full component gate is pending, and earlier failures remain failed.
+replacement full component gate is recorded below; earlier failures remain failed.
+
+[Full released component gate42197158803](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42197158803)
+then passed all three independent jobs:24 model tests and both ABI/SwiftUI
+slices; seven ordinary UI journeys plus missing-entitlement refusal; and the
+unchanged focused unknown-CA/system-trusted HTTPS helper on a fresh runner.
+The peer saw exactly one accepted GET, one redirect, one lost-answer POST and
+zero redirected requests/replays. This is acceptance under the isolated fixture,
+not proof of the historical unavailable-device or host-health failure cause.
+The compiler update is to released0.2.48 with the same pinned setup action.
+No Android/runtime production code changed in these CI/documentation updates.
