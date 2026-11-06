@@ -3,6 +3,15 @@ import XCTest
 @testable import AblaMobileModel
 
 final class OneTreeTests: XCTestCase {
+    func testCanonicalUnicodeDoesNotMergeDistinctWireIdentities() throws {
+        let root = try OneTree.decode(wire(node(children: [node("\u{e9}"), node("e\u{301}")])))
+        XCTAssertEqual(root.root.children.count, 2)
+        XCTAssertNotEqual(root.root.children[0].id, root.root.children[1].id)
+        let a = try OneTree.decode(wire(node("a\u{301}\u{323}")))
+        let b = try OneTree.decode(wire(node("a\u{323}\u{301}")))
+        XCTAssertNotEqual(a.presentationIdentity, b.presentationIdentity)
+        XCTAssertNotEqual(WireValue.text("\u{e9}"), WireValue.text("e\u{301}"))
+    }
     func testRouteIdentityChangesButOrdinaryRevisionDoesNotResetEditors() throws {
         let first = try OneTree.decode(wire(node(properties: ["a.one.entry": "1"])))
         let echo = try OneTree.decode(wire(node(properties: ["a.one.entry": "1"]), revision: 2))

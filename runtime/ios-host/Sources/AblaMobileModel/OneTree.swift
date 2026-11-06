@@ -9,6 +9,16 @@ public enum TreeDecodeError: Error, Equatable, Sendable {
 
 public enum WireValue: Equatable, Sendable {
     case text(String), integer(Int64), decimal(Double), flag(Bool), null
+    public static func == (lhs: WireValue, rhs: WireValue) -> Bool {
+        switch (lhs, rhs) {
+        case (.text(let a), .text(let b)): a.utf8.elementsEqual(b.utf8)
+        case (.integer(let a), .integer(let b)): a == b
+        case (.decimal(let a), .decimal(let b)): a == b
+        case (.flag(let a), .flag(let b)): a == b
+        case (.null, .null): true
+        default: false
+        }
+    }
     public var text: String {
         switch self {
         case .text(let value): value
@@ -25,7 +35,10 @@ public struct OneNode: Equatable, Sendable, Identifiable, CustomStringConvertibl
     public let key: String
     public let properties: [String: WireValue]
     public let children: [OneNode]
-    public var id: String { key }
+    public var id: Data { Data(key.utf8) }
+    public static func == (lhs: OneNode, rhs: OneNode) -> Bool {
+        lhs.type == rhs.type && lhs.id == rhs.id && lhs.properties == rhs.properties && lhs.children == rhs.children
+    }
     public var description: String { "OneNode(type: \(type), children: \(children.count), values: redacted)" }
     public func value(_ name: String, default fallback: String = "") -> String {
         properties[name]?.text ?? fallback
@@ -53,7 +66,7 @@ public struct OneTree: Equatable, Sendable, CustomStringConvertible {
     /// New route entries/root keys reset ephemeral editor state. This identity
     /// is deliberately independent of revision, so ordinary echoes keep focus.
     public var presentationIdentity: String {
-        "\(root.key.utf8.count):\(root.key)|\(root.attribute("one.entry"))"
+        Data(root.key.utf8).base64EncodedString() + "." + Data(root.attribute("one.entry").utf8).base64EncodedString()
     }
     public func admitsEvent(revision rendered: Int64, identity: String, identifier: Int64) -> Bool {
         // Keep the actual rendered revision. One's existing recent-event map
@@ -135,11 +148,11 @@ public struct OneTree: Equatable, Sendable, CustomStringConvertible {
             }
         }
         guard children.count <= 1024 else { throw TreeDecodeError.tooManyChildren }
-        var seen: Set<String> = []
+        var seen: Set<Data> = []
         var parsed: [OneNode] = []
         for raw in children {
             let child = try decodeNode(raw, depth: depth + 1, remaining: &remaining)
-            guard seen.insert(child.key).inserted else { throw TreeDecodeError.duplicateSiblingKey }
+            guard seen.insert(child.id).inserted else { throw TreeDecodeError.duplicateSiblingKey }
             parsed.append(child)
         }
         return OneNode(type: type, key: key, properties: values, children: parsed)

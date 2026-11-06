@@ -70,7 +70,7 @@ public struct AblaMobileRoot: View {
             }.disabled(node.attribute("enabled") == "false" || node.event("onPress") == 0)
                 .buttonStyle(OneControlStyle(node: node))
                 .accessibilityIdentifier(node.key)
-        case "one.input": OneInputView(node: node, revision: revision, identity: identity, store: store).id(node.key).accessibilityIdentifier(node.key)
+        case "one.input": OneInputView(node: node, revision: revision, identity: identity, store: store).id(node.id).accessibilityIdentifier(node.key)
         case "one.spacer", "spacer": Spacer(minLength: 0)
         case "one.divider", "divider": Divider()
         case "one.native":
@@ -86,14 +86,14 @@ public struct AblaMobileRoot: View {
     let revision: Int64
     let identity: String
     @ObservedObject var store: MobileRuntimeStore
-    @State private var editing: String
+    @State private var editingBytes: Data
     @State private var echoes: InputEchoes
     @State private var expired: UInt64?
     @FocusState private var focused: Bool
     init(node: OneNode, revision: Int64, identity: String, store: MobileRuntimeStore) {
         self.node = node; self.revision = revision; self.identity = identity; self.store = store
         let initial = node.attribute("value")
-        _editing = State(initialValue: initial)
+        _editingBytes = State(initialValue: Data(initial.utf8))
         _echoes = State(initialValue: InputEchoes(initial: initial))
     }
     private var secure: Bool { node.attribute("secure") == "true" }
@@ -106,6 +106,10 @@ public struct AblaMobileRoot: View {
         }
     }
     private var model: String { node.attribute("value") }
+    private var editing: String {
+        get { String(decoding: editingBytes, as: UTF8.self) }
+        nonmutating set { editingBytes = Data(newValue.utf8) }
+    }
     private var binding: Binding<String> {
         Binding(get: { editing }, set: { raw in
             let keyboard = node.attribute("keyboard")
@@ -125,9 +129,10 @@ public struct AblaMobileRoot: View {
             if secure && node.attribute("multiline") == "true" {
                 Text("Secure multiline input is unsupported").accessibilityIdentifier("runtime.secure_multiline_refused")
             } else if secure {
-                SecureField(node.attribute("placeholder"), text: binding)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
+                ExactSecureEditor(text: binding, placeholder: node.attribute("placeholder"),
+                    identifier: node.key, enabled: node.attribute("enabled") != "false", keyboard: keyboard,
+                    focusChanged: { focused = $0 },
+                    submitted: { _ = store.send(node.event("onSubmit"), revision: revision, identity: identity) })
                     .privacySensitive()
             } else if node.attribute("multiline") == "true" {
                 TextField(node.attribute("placeholder"), text: binding, axis: .vertical)
@@ -154,6 +159,55 @@ public struct AblaMobileRoot: View {
     private func accept(_ value: String) {
         if let replacement = echoes.acceptModel(value, focused: focused, expiredGeneration: expired) {
             editing = replacement
+        }
+    }
+}
+
+/// UIKit's editor is updated by byte identity. Swift String equality treats
+/// canonically equivalent Unicode strings as equal, while protocol v1 does not.
+@MainActor private struct ExactSecureEditor: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let identifier: String
+    let enabled: Bool
+    let keyboard: UIKeyboardType
+    let focusChanged: (Bool) -> Void
+    let submitted: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.isSecureTextEntry = true
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.smartQuotesType = .no
+        field.smartDashesType = .no
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        field.placeholder = placeholder
+        field.accessibilityIdentifier = identifier
+        field.isEnabled = enabled
+        field.keyboardType = keyboard
+        if !(field.text ?? "").utf8.elementsEqual(text.utf8) { field.text = text }
+    }
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: ExactSecureEditor
+        init(_ parent: ExactSecureEditor) { self.parent = parent }
+        @objc func changed(_ field: UITextField) {
+            parent.text = field.text ?? ""
+            // Apply normalization or a rejected/full event queue immediately.
+            if !(field.text ?? "").utf8.elementsEqual(parent.text.utf8) { field.text = parent.text }
+        }
+        func textFieldDidBeginEditing(_ textField: UITextField) { parent.focusChanged(true) }
+        func textFieldDidEndEditing(_ textField: UITextField) { parent.focusChanged(false) }
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.submitted(); textField.resignFirstResponder(); return true
         }
     }
 }
