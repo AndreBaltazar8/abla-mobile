@@ -104,14 +104,14 @@ and [OneDecoration.swift](../runtime/ios-host/Sources/AblaMobileHost/OneDecorati
 | Feed | Bounded decoded tree rendered eagerly; lazy paging/scroll-position parity remains open. |
 | Text, spacer, divider | Basic native rendering; rich spans, icons, images and bitmaps refuse as unsupported. |
 | Pressable/link | Native enabled state, revision-bound action, pressed decoration; actual disabled-state journey passes. |
-| Input | Secure and ordinary single-line UIKit byte identity accepted; multiline replacement/typing is a separate gate. Secure multiline refuses explicitly. |
+| Input | Secure/ordinary single-line and ordinary multiline NFC/NFD replacement plus typed newline passed in the actual One app. Composition/paste/selection remain open; secure multiline refuses explicitly. |
 | Styling | Padding, bounded dimensions, fill, colors, borders/radius, opacity and pressed/focused/disabled/selected colors; not a full Compose-style implementation. |
 | Navigation | Application route-entry changes rebuild presentation identity and clear pending edits. Native back-stack/gesture mapping still needs an explicit contract and journey. |
 | Native fallback | Last portable child is rendered when supplied; game/WebView/media adapters are not implemented. |
 | Popover/accessibility | Popover is unsupported; leaf identifiers and native field/button semantics exist, but VoiceOver order/actions and complete dynamic-type parity need their own acceptance. |
 
-Before a stable iOS release, validate composition/paste/selection, multiline
-typing, keyboard avoidance/rotation, native navigation/back and lifecycle
+Before a stable iOS release, validate composition/paste/selection, keyboard
+avoidance/rotation, native navigation/back and lifecycle
 transitions on the actual application. Simulator success does not replace
 physical-device memory, provisioning or usability checks.
 
@@ -177,7 +177,8 @@ The multiline control
 failed specifically at NFD after NFC/newline bytes arrived; the other five
 ordinary journeys passed. Candidate b167a852 uses a byte-aware UITextView,
 retains actual newlines and bounds the visible height with native scrolling.
-Its unchanged assertion/deadline is under test, with no acceptance claim yet.
+The correction was subsequently accepted by the actual-app runs below; the
+original failed control remains part of the evidence.
 
 [42160960015](https://github.com/AndreBaltazar8/abla-mobile/actions/runs/42160960015)
 accepted multiline replacement through the actual One application (44 contracts,
@@ -199,7 +200,16 @@ exception or date override. The probe runs off the UI thread, following Apple's
 with [certificate network fetching disabled](https://developer.apple.com/documentation/security/sectrustsetnetworkfetchallowed(_:_:)).
 Only fixed status codes and peer TLS error codes persist. The production
 URLSession client, trust policy, request deadline and no-replay behavior remain
-unchanged. This candidate has no acceptance claim until its CI gate finishes.
+unchanged. Its combined run42167180679 did not complete within the job budget:
+the fixed OS-trust marker passed, while the later request failed and the peer
+recorded ECONNRESET. Severe Simulator startup/automation delays preceded the
+probe; this does not establish a trust-policy failure.
+
+Focused run42170822457 passed unknown-CA refusal, then failed the independent
+host health request before the trusted app testcase. Candidate3abbd5be limits
+the diagnostic job to one booted Simulator at a time and records host memory
+and boot states. Run42173007448 is pending. It changes no production code or
+client policy, and its fixture hypothesis is unproved.
 
 Simulator memory and successful archive linkage do not establish physical
 iPhone VM limits, device provisioning or signing acceptance. Build/sign/install
