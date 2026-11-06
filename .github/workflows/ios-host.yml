@@ -102,7 +102,7 @@ jobs:
             -scheme HostSmoke -sdk iphonesimulator -destination "id=$device" \
             -parallel-testing-enabled NO -derivedDataPath "$RUNNER_TEMP/ios-smoke-build" \
             -resultBundlePath "$RUNNER_TEMP/ios-ui-evidence/HostSmoke.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee "$RUNNER_TEMP/ios-ui-evidence/simulator-ui.log"
       - name: Retain presentation evidence
         if: always()

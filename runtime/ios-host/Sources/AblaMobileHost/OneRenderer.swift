@@ -12,7 +12,7 @@ public struct AblaMobileRoot: View {
             if store.failure != nil { Text("Application unavailable").accessibilityIdentifier("runtime.failure") }
             else if let tree = store.tree {
                 NavigationStack {
-                    OneNodeView(node: tree.root, store: store)
+                    OneNodeView(node: tree.root, revision: tree.revision, store: store)
                         .navigationTitle(tree.showTopBar ? tree.title : "")
                         .preferredColorScheme(tree.darkTheme ? .dark : .light)
                 }
@@ -26,10 +26,11 @@ public struct AblaMobileRoot: View {
 
 @MainActor private struct OneNodeView: View {
     let node: OneNode
+    let revision: Int64
     @ObservedObject var store: MobileRuntimeStore
     private var gap: CGFloat { CGFloat(max(0, min(256, node.number("gap", default: 8)))) }
     private var children: some View {
-        ForEach(node.children) { child in AnyView(OneNodeView(node: child, store: store)) }
+        ForEach(node.children) { child in AnyView(OneNodeView(node: child, revision: revision, store: store)) }
     }
     var body: some View { content.accessibilityIdentifier(node.key) }
     @ViewBuilder private var content: some View {
@@ -44,15 +45,15 @@ public struct AblaMobileRoot: View {
             Text(node.attribute("text", default: node.value("text")))
                 .font(.system(size: CGFloat(max(8, min(96, node.number("fontSize", default: 16))))))
         case "one.pressable", "one.link", "button":
-            Button { _ = store.send(node.event("onPress")) } label: {
+            Button { _ = store.send(node.event("onPress"), revision: revision) } label: {
                 if node.children.isEmpty { Text(node.attribute("text", default: node.value("text"))) }
                 else { VStack(spacing: gap) { children } }
             }.disabled(node.attribute("enabled") == "false" || node.event("onPress") == 0)
-        case "one.input": OneInputView(node: node, store: store).id(node.key)
+        case "one.input": OneInputView(node: node, revision: revision, store: store).id(node.key)
         case "one.spacer", "spacer": Spacer(minLength: 0)
         case "one.divider", "divider": Divider()
         case "one.native":
-            if let fallback = node.children.last { AnyView(OneNodeView(node: fallback, store: store)) }
+            if let fallback = node.children.last { AnyView(OneNodeView(node: fallback, revision: revision, store: store)) }
             else { Text("Unsupported native content") }
         default: Text("Unsupported component: \(node.type)").accessibilityIdentifier("runtime.unsupported")
         }
@@ -61,13 +62,14 @@ public struct AblaMobileRoot: View {
 
 @MainActor private struct OneInputView: View {
     let node: OneNode
+    let revision: Int64
     @ObservedObject var store: MobileRuntimeStore
     @State private var editing: String
     @State private var echoes: InputEchoes
     @State private var expired: UInt64?
     @FocusState private var focused: Bool
-    init(node: OneNode, store: MobileRuntimeStore) {
-        self.node = node; self.store = store
+    init(node: OneNode, revision: Int64, store: MobileRuntimeStore) {
+        self.node = node; self.revision = revision; self.store = store
         let initial = node.attribute("value")
         _editing = State(initialValue: initial)
         _echoes = State(initialValue: InputEchoes(initial: initial))
@@ -79,7 +81,7 @@ public struct AblaMobileRoot: View {
             let limit = max(0, min(16384, Int(node.attribute("maxLength")) ?? 4000))
             guard next.utf16.count <= limit, next != editing else { return }
             var proposed = echoes
-            guard proposed.changed(next), store.send(node.event("onChange"), payload: next, change: true) else { return }
+            guard proposed.changed(next), store.send(node.event("onChange"), revision: revision, payload: next, change: true) else { return }
             echoes = proposed; editing = next
         })
     }
@@ -101,7 +103,7 @@ public struct AblaMobileRoot: View {
         }
         .focused($focused)
         .disabled(node.attribute("enabled") == "false")
-        .onSubmit { _ = store.send(node.event("onSubmit")); focused = false }
+        .onSubmit { _ = store.send(node.event("onSubmit"), revision: revision); focused = false }
         .onChange(of: model) { _, next in accept(next) }
         .onChange(of: focused) { _, _ in accept(model) }
         .task(id: echoes.generation) {

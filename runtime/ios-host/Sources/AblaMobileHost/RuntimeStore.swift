@@ -28,8 +28,9 @@ import CAblaMobile
         tree = nil; buffer = [UInt8](repeating: 0, count: buffer.count)
         abla_ios_shutdown_v1()
     }
-    @discardableResult public func send(_ identifier: Int64, payload: String = "", change: Bool = false) -> Bool {
-        guard let revision = tree?.revision, failure == nil, identifier > 0,
+    @discardableResult public func send(_ identifier: Int64, revision: Int64,
+                                       payload: String = "", change: Bool = false) -> Bool {
+        guard tree?.revision == revision, revision > 0, failure == nil, identifier > 0,
               payload.utf8.count <= Int(ABLA_IOS_EVENT_LIMIT) else { return false }
         return Array(payload.utf8).withUnsafeBufferPointer {
             abla_ios_event_v1(revision, identifier, $0.baseAddress, Int64($0.count), change ? 1 : 0) == 1

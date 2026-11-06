@@ -164,13 +164,14 @@ static int64_t scalar_call(void *context, int64_t value) {
     }
     if (value >= ABLA_MOBILE_TREE_BYTE_BASE && value < ABLA_MOBILE_TREE_BYTE_BASE + 256) {
         if (!host.working_valid || host.working_size == ABLA_IOS_TREE_LIMIT) {
-            host.working_valid = false; return -1;
+            host.working_valid = false; protocol_failure(); return -1;
         }
         host.working[host.working_size++] = (uint8_t)(value - ABLA_MOBILE_TREE_BYTE_BASE);
         return 0;
     }
     if (value == ABLA_MOBILE_TREE_END) {
-        if (!host.working_valid || atomic_load(&host.closing)) return -1;
+        if (!host.working_valid) { protocol_failure(); return -1; }
+        if (atomic_load(&host.closing)) return -1;
         pthread_mutex_lock(&host.mutex);
         if (host.tree_sequence == INT64_MAX) {
             pthread_mutex_unlock(&host.mutex); protocol_failure(); return -1;
@@ -180,6 +181,7 @@ static int64_t scalar_call(void *context, int64_t value) {
         host.published_size = host.working_size; host.tree_sequence++;
         pthread_mutex_unlock(&host.mutex);
         wipe(host.working, host.working_size); host.working_size = 0;
+        host.working_valid = false;
         pump_platform();
         return 0;
     }
