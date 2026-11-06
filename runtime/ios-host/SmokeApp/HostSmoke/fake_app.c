@@ -114,6 +114,9 @@ int64_t abla_mobile_run(void) {
         if (event == 11) { entry++; ignore = 0; memset(value, 0, sizeof(value)); status = "new_route"; }
         if (event == 15) { strcpy(value, "\xc3\xa9"); strcpy(plain_value, "\xc3\xa9"); strcpy(multiline_value, "\xc3\xa9\\nM"); status = "unicode_nfc"; }
         if (event == 16) { strcpy(value, "e\xcc\x81"); strcpy(plain_value, "e\xcc\x81"); strcpy(multiline_value, "e\xcc\x81\\nM"); status = "unicode_nfd"; }
+        if (event == 23 && bytes == 12 && !memcmp(payload, "First\nSecond", 12)) {
+            strcpy(multiline_value, "First\\nSecond"); status = "multiline_typed";
+        }
         if (event == 17 && !secure_phase) {
             secure_phase = 1; status = "keychain_in_progress";
             secure_request = abla_mobile_http_request("STOREDEL", "host-smoke-isolated-key", "");
