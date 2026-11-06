@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 1b652f75af3bb942b40218945babe3ecac19b8c9
+          ref: 2230766ffdb01203316898f01a032f470da242c9
           path: abla-mobile
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -44,6 +44,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ios-real-evidence"
           brew install --force-bottle llvm@23 lld@23 openssl@3 binaryen
           export PATH="$(brew --prefix llvm@23)/bin:$(brew --prefix lld@23)/bin:$(brew --prefix openssl@3)/bin:$PATH"
+          export ABLA_SYSROOT="$PWD"
           tools/bootstrap-compiler.sh build/ci/bootstrap-ablac \
             2>&1 | tee "$RUNNER_TEMP/ios-real-evidence/bootstrap.log"
           tools/build-self-hosted-current.sh build/ci/bootstrap-ablac build/ci/ablac-stage1 \
@@ -94,6 +95,10 @@ jobs:
           device=$(jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid' \
             "$RUNNER_TEMP/ios-real-evidence/simulators.json")
           test -n "$device" && test "$device" != null
+          if test "$(jq -r --arg id "$device" '.devices[][] | select(.udid == $id) | .state' "$RUNNER_TEMP/ios-real-evidence/simulators.json")" = Shutdown; then
+            xcrun simctl boot "$device"
+          fi
+          xcrun simctl bootstatus "$device" -b
           archive="$GITHUB_WORKSPACE/abla-one/build/ios-real-app/ios-arm64-simulator/libabla_app.a"
           set +e
           xcodebuild test -project abla-mobile/runtime/ios-host/SmokeApp/HostSmoke.xcodeproj \
