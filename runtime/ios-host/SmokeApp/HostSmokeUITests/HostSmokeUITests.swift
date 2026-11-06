@@ -1,6 +1,14 @@
 import XCTest
 
 @MainActor final class HostSmokeUITests: XCTestCase {
+    func testMultilineModelReplacementPreservesExactUnicodeBytes() {
+        let app = XCUIApplication(); app.launch()
+        XCTAssertTrue(app.staticTexts["timer_ready"].waitForExistence(timeout: 15))
+        app.buttons["nfc"].tap()
+        XCTAssertTrue(app.staticTexts["multiline_bytes_nfc"].waitForExistence(timeout: 5))
+        app.buttons["nfd"].tap()
+        XCTAssertTrue(app.staticTexts["multiline_bytes_nfd"].waitForExistence(timeout: 5))
+    }
     // Executed only by the separate no-entitlements build, never weakened into
     // accepting plaintext storage or treating a refused write as success.
     func testMissingEntitlementRefusesSecureWrite() {

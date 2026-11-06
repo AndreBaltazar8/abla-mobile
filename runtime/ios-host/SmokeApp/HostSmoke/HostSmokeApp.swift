@@ -7,15 +7,17 @@ import AblaMobileHost
     @State private var traits = "secure_traits_waiting"
     @State private var editorBytes = "editor_bytes_other"
     @State private var ordinaryBytes = "ordinary_bytes_other"
+    @State private var multilineBytes = "multiline_bytes_other"
     var body: some Scene {
         WindowGroup {
             AblaMobileRoot(store: runtime)
-                .background(SecureTraitsProbe(result: $traits, bytes: $editorBytes, ordinary: $ordinaryBytes).frame(width: 0, height: 0))
+                .background(SecureTraitsProbe(result: $traits, bytes: $editorBytes, ordinary: $ordinaryBytes, multiline: $multilineBytes).frame(width: 0, height: 0))
                 .overlay(alignment: .bottom) {
                     VStack {
                         Text(traits).accessibilityIdentifier("fixture.traits")
                         Text(editorBytes).accessibilityIdentifier("fixture.bytes")
                         Text(ordinaryBytes).accessibilityIdentifier("fixture.ordinary")
+                        Text(multilineBytes).accessibilityIdentifier("fixture.multiline")
                     }
                 }
         }
@@ -28,11 +30,13 @@ private struct SecureTraitsProbe: UIViewRepresentable {
     @Binding var result: String
     @Binding var bytes: String
     @Binding var ordinary: String
+    @Binding var multiline: String
     func makeUIView(context: Context) -> ProbeView {
         let view = ProbeView()
         view.report = { result = $0 }
         view.reportBytes = { bytes = $0 }
         view.reportOrdinary = { ordinary = $0 }
+        view.reportMultiline = { multiline = $0 }
         return view
     }
     func updateUIView(_ view: ProbeView, context: Context) {}
@@ -40,6 +44,7 @@ private struct SecureTraitsProbe: UIViewRepresentable {
         var report: ((String) -> Void)?
         var reportBytes: ((String) -> Void)?
         var reportOrdinary: ((String) -> Void)?
+        var reportMultiline: ((String) -> Void)?
         private var probe: Task<Void, Never>?
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -64,6 +69,11 @@ private struct SecureTraitsProbe: UIViewRepresentable {
                         self.reportOrdinary?(raw == [0xc3, 0xa9] ? "ordinary_bytes_nfc" :
                             raw == [0x65, 0xcc, 0x81] ? "ordinary_bytes_nfd" : "ordinary_bytes_other")
                     }
+                    if let text = self.findMultiline(in: self.window) {
+                        let raw = Array(text.utf8)
+                        self.reportMultiline?(raw == [0xc3, 0xa9, 10, 77] ? "multiline_bytes_nfc" :
+                            raw == [0x65, 0xcc, 0x81, 10, 77] ? "multiline_bytes_nfd" : "multiline_bytes_other")
+                    }
                     do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
                 }
             }
@@ -79,6 +89,18 @@ private struct SecureTraitsProbe: UIViewRepresentable {
             if let field = view as? UITextField, !field.isSecureTextEntry,
                field.accessibilityIdentifier == "ordinary" { return field }
             for child in view.subviews { if let field = findOrdinary(in: child) { return field } }
+            return nil
+        }
+        private func findMultiline(in view: UIView?) -> String? {
+            guard let view else { return nil }
+            if view.accessibilityIdentifier == "multiline", let text = firstPublicText(in: view) { return text }
+            for child in view.subviews { if let text = findMultiline(in: child) { return text } }
+            return nil
+        }
+        private func firstPublicText(in view: UIView) -> String? {
+            if let field = view as? UITextField, !field.isSecureTextEntry { return field.text ?? "" }
+            if let field = view as? UITextView { return field.text ?? "" }
+            for child in view.subviews { if let text = firstPublicText(in: child) { return text } }
             return nil
         }
     }
