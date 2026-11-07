@@ -86,6 +86,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -138,11 +139,30 @@ private fun oneWeight(value: String): FontWeight? = when (value) {
     else -> value.toIntOrNull()?.let { FontWeight(it) }
 }
 
-private fun oneFont(value: String): FontFamily? = when (value) {
-    "" -> null
-    "serif" -> FontFamily.Serif
-    "mono", "monospace" -> FontFamily.Monospace
-    else -> FontFamily.SansSerif
+// Families bundled with the host, by lowercase name; the TTFs are in res/font.
+private val oneBundledFonts: Map<String, FontFamily> = mapOf(
+    "inter" to FontFamily(
+        Font(R.font.inter_400, FontWeight.Normal),
+        Font(R.font.inter_500, FontWeight.Medium),
+        Font(R.font.inter_600, FontWeight.SemiBold),
+        Font(R.font.inter_700, FontWeight.Bold),
+    ),
+)
+
+// A CSS-like stack ("Inter, sans-serif"): the first bundled or generic family
+// wins, and a stack of only unknown names falls back to sans-serif.
+internal fun oneFont(value: String): FontFamily? {
+    if (value.isBlank()) return null
+    for (part in value.split(",")) {
+        val name = part.trim().trim('"', '\'').lowercase()
+        oneBundledFonts[name]?.let { return it }
+        when (name) {
+            "serif" -> return FontFamily.Serif
+            "mono", "monospace" -> return FontFamily.Monospace
+            "sans-serif", "sans", "system-ui" -> return FontFamily.SansSerif
+        }
+    }
+    return FontFamily.SansSerif
 }
 
 private fun oneHorizontal(value: String): Alignment.Horizontal = when (value) {
