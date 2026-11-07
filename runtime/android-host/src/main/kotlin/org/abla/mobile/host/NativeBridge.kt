@@ -57,6 +57,16 @@ internal object NativeBridge {
         ArrayBlockingQueue(32),
         { task -> Thread(task, "abla-mobile-http").apply { isDaemon = true } },
     )
+    // Direct uploads take minutes for a large file: their own thread, so requests
+    // keep moving meanwhile.
+    private val uploadExecutor = ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(4),
+        { task -> Thread(task, "abla-mobile-upload").apply { isDaemon = true } },
+    )
     private val timerExecutor = ScheduledThreadPoolExecutor(
         1,
         { task -> Thread(task, "abla-mobile-timer").apply { isDaemon = true } },
@@ -254,8 +264,8 @@ internal object NativeBridge {
             method == "ASSIST" || method == "TIMER" || method == "PICKIMG" || method == "PICKEMJ" || method == "IMGCLEAR"
         if (requestId <= 0L ||
             (method != "GET" && method != "POST" && method != "SEND" && method != "PICKFILE" &&
-                method != "FILEREAD" && method != "FILEDEL" && !secureMethod && !voiceMethod) ||
-            urlBytes.size > 2048 || bodyBytes.size > (if (method == "SEND") 8 * 1024 * 1024 else 16384)
+                method != "FILEREAD" && method != "FILEDEL" && method != "FILEPUT" && !secureMethod && !voiceMethod) ||
+            urlBytes.size > 2048 || bodyBytes.size > (if (method == "SEND") 8 * 1024 * 1024 else if (method == "FILEPUT") 1024 * 1024 else 16384)
         ) {
             completeHttp(requestId, 0, "", "invalid HTTP request")
             return
@@ -275,6 +285,10 @@ internal object NativeBridge {
         }
         if (method == "SEND") {
             sendRequest(requestId, url, bodyBytes)
+            return
+        }
+        if (method == "FILEPUT") {
+            putFileParts(requestId, url, bodyBytes)
             return
         }
         if (method == "PICKFILE" || method == "FILEREAD" || method == "FILEDEL") {
@@ -829,6 +843,34 @@ internal object NativeBridge {
                 }
             }
             else -> completeHttp(requestId, if (HostFiles.delete(url)) 204 else 404, "", "")
+        }
+    }
+
+    // FILEPUT (direct uploads): url is a picked handle, body is {"first", "partBytes",
+    // "urls"}; DirectParts sends the parts. Completes with {"parts":[{"part","etag"}]}
+    // or a 502 naming the failure. The document never goes through the app.
+    private fun putFileParts(requestId: Long, handle: String, body: ByteArray) {
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "files are unavailable")
+        val plan = try { JSONObject(body.toString(Charsets.UTF_8)) } catch (_: JSONException) { return completeHttp(requestId, 400, "", "invalid direct upload") }
+        val first = plan.optInt("first", 0)
+        val partBytes = plan.optLong("partBytes", 0L)
+        val list = plan.optJSONArray("urls")
+        val urls = if (list == null) emptyList() else List(list.length()) { list.optString(it, "") }
+        if (!HostFiles.exists(handle) || !DirectParts.valid(first, partBytes, urls)) return completeHttp(requestId, 400, "", "invalid direct upload")
+        val total = HostFiles.size(handle)
+        try {
+            uploadExecutor.execute {
+                try {
+                    val sent = DirectParts.upload(first, partBytes, total, urls) { HostFiles.open(context, handle) }
+                    val parts = org.json.JSONArray()
+                    for ((part, etag) in sent) parts.put(JSONObject().put("part", part).put("etag", etag))
+                    completeHttp(requestId, 200, JSONObject().put("parts", parts).toString(), "")
+                } catch (failure: Exception) {
+                    completeHttp(requestId, 502, "", (failure.message ?: "Direct upload failed").take(200))
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            completeHttp(requestId, 0, "", "platform worker queue is full")
         }
     }
 
