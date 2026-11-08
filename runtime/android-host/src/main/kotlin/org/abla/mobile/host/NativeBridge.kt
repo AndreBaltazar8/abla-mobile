@@ -65,7 +65,9 @@ internal object NativeBridge {
     @JvmStatic
     fun pendingSince(since: Long, background: Long): Int {
         val now = android.os.SystemClock.uptimeMillis()
-        return started.values.count { it >= since && now - it < background }
+        // An event the app has not answered with a tree yet; one that changes nothing stops counting after 300 ms.
+        val answering = if (lastEventAt > lastTreeAt && lastEventAt >= since && now - lastEventAt < 300) 1 else 0
+        return started.values.count { it >= since && now - it < background } + answering
     }
 
     // Direct uploads take minutes for a large file: their own thread, so requests
@@ -123,19 +125,38 @@ internal object NativeBridge {
 
     external fun start(): Boolean
 
-    external fun sendEvent(
+    @JvmName("sendEvent")
+    private external fun sendEventNative(
         revision: Long,
         identifier: Long,
         payload: ByteArray,
     ): Boolean
 
-    // Like sendEvent, but replaces the newest queued event if it's the same one
-    // from the same tree.
-    external fun sendChange(
+    @JvmName("sendChange")
+    private external fun sendChangeNative(
         revision: Long,
         identifier: Long,
         payload: ByteArray,
     ): Boolean
+
+    // When the app was last sent an event, and last sent us a tree (uptime ms): an event newer than the tree is still
+    // being handled, which pendingSince counts.
+    @Volatile private var lastEventAt = 0L
+    @Volatile private var lastTreeAt = 0L
+
+    @JvmName("sendEventTracked")
+    fun sendEvent(revision: Long, identifier: Long, payload: ByteArray): Boolean {
+        lastEventAt = android.os.SystemClock.uptimeMillis()
+        return sendEventNative(revision, identifier, payload)
+    }
+
+    // Like sendEvent, but replaces the newest queued event if it's the same one
+    // from the same tree.
+    @JvmName("sendChangeTracked")
+    fun sendChange(revision: Long, identifier: Long, payload: ByteArray): Boolean {
+        lastEventAt = android.os.SystemClock.uptimeMillis()
+        return sendChangeNative(revision, identifier, payload)
+    }
 
     // A link is starting the app: its first tree stays off the screen until the next one, the
     // link's, or for a moment if the app has nothing to say about it.
@@ -157,6 +178,7 @@ internal object NativeBridge {
 
     @JvmStatic
     fun onTreeFromNative(bytes: ByteArray) {
+        lastTreeAt = android.os.SystemClock.uptimeMillis()
         traceLatency("tree")
         val state = try {
             val source = bytes.toString(Charsets.UTF_8)
