@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.IntOffset
@@ -347,6 +348,8 @@ private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modi
         }
     }
     if (p.a("label").isNotEmpty()) m = m.semantics { contentDescription = p.a("label") }
+    // A chip, tab or menu item that says whether it is chosen exposes it, so a screen reader and the test driver can tell (653).
+    oneSelectedSemantics(p.a("selected"))?.let { chosen -> m = m.semantics { selected = chosen } }
     if (node.type == "one.scroll") m = m.verticalScroll(rememberScrollState())
     if (node.type == "one.scrollRow") m = m.horizontalScroll(rememberScrollState())
     m = m.onePadding(p)
@@ -690,4 +693,11 @@ private fun OneNative(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifie
     } else if (fallback != null) {
         RenderOne(tree, fallback, modifier)
     }
+}
+
+/** The node's `selected` attribute as the accessibility state: true or false when it says so, nothing when it does not. */
+internal fun oneSelectedSemantics(value: String): Boolean? = when (value) {
+    "true" -> true
+    "false" -> false
+    else -> null
 }
