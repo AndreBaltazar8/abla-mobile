@@ -1031,6 +1031,23 @@ internal object NativeBridge {
         mutableState.value = HostState.Failed(kind, message.take(1024))
     }
 
+    // Debug builds only: how many times each node key recomposed since the last take. A test driver reads them.
+    private val recompositions = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    internal fun countingRecompositions(): Boolean = (applicationContext?.applicationInfo?.flags ?: 0) and 2 != 0
+
+    internal fun recomposed(key: String) {
+        recompositions.merge(key, 1, Int::plus)
+    }
+
+    // "key=count" lines, and the counts start again from nothing.
+    @JvmStatic
+    fun recompositionsTake(): String {
+        val lines = recompositions.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}=${it.value}" }
+        recompositions.clear()
+        return lines
+    }
+
     internal fun traceLatency(stage: String) {
         if ((applicationContext?.applicationInfo?.flags ?: 0) and 2 != 0)
             android.util.Log.d("AblaLatency", stage)

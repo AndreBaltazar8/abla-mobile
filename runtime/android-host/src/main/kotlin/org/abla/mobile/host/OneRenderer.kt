@@ -341,6 +341,8 @@ internal val LocalOneTreeRef = androidx.compose.runtime.staticCompositionLocalOf
 
 @Composable
 internal fun RenderOne(tree: OneTreeRef, node: UiNode, modifier: Modifier) {
+    // Debug builds count the nodes that actually recomposed, for tests that an unchanged sibling is skipped.
+    if (NativeBridge.countingRecompositions()) androidx.compose.runtime.SideEffect { NativeBridge.recomposed(node.key) }
     val p = OneProps(node)
     when (node.type) {
         "one.column", "one.row", "one.scrollRow", "one.stack", "one.scroll", "one.pressable", "one.link" -> OneContainer(tree, node, p, modifier)
