@@ -57,9 +57,16 @@ internal object NativeBridge {
         ArrayBlockingQueue(32),
         { task -> Thread(task, "abla-mobile-http").apply { isDaemon = true } },
     )
-    // Requests and uploads queued or running: a test driver waits for none before it says the app is still.
+    // When each request the app is waiting on began (uptime ms), until its completion: not timers, pickers or voice.
+    private val started = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+
+    // Requests begun at or after `since` and younger than `background` ms: a test driver waits for none before it says the
+    // app is still. A longer one, such as a live channel's wait for news, is the app's background, not its answer.
     @JvmStatic
-    fun pendingWork(): Int = requestExecutor.queue.size + requestExecutor.activeCount + uploadExecutor.queue.size + uploadExecutor.activeCount
+    fun pendingSince(since: Long, background: Long): Int {
+        val now = android.os.SystemClock.uptimeMillis()
+        return started.values.count { it >= since && now - it < background }
+    }
 
     // Direct uploads take minutes for a large file: their own thread, so requests
     // keep moving meanwhile.
@@ -274,6 +281,7 @@ internal object NativeBridge {
             completeHttp(requestId, 0, "", "invalid HTTP request")
             return
         }
+        if (!voiceMethod && method != "PICKFILE") started[requestId] = android.os.SystemClock.uptimeMillis()
         if (voiceMethod) {
             when (method) {
                 "VOICEON" -> startVoiceCapture(requestId, url)
@@ -900,6 +908,7 @@ internal object NativeBridge {
         bodyBase64: String? = null,
         file: JSONObject? = null,
     ) {
+        started.remove(requestId)
         val completion = try {
             JSONObject()
                 .put("requestId", requestId)
