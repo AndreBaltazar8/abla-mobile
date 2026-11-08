@@ -281,7 +281,11 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
             }
             val saved = rememberSaveableStateHolder()
             saved.SaveableStateProvider(entry) {
-                RenderNode(tree, tree.root, Modifier.fillMaxSize())
+                val ref = remember { OneTreeRef(tree) }
+                ref.current = tree
+                androidx.compose.runtime.CompositionLocalProvider(LocalOneTreeRef provides ref) {
+                    RenderNode(tree, tree.root, Modifier.fillMaxSize())
+                }
             }
         }
     }
@@ -291,7 +295,7 @@ private fun TreeScreen(tree: UiTree, modifier: Modifier) {
 internal fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifier) {
     key(node.key) {
         val tagged = modifier.testTag(node.key)
-        if (node.type.startsWith("one.")) RenderOne(tree, node, tagged)
+        if (node.type.startsWith("one.")) RenderOne(LocalOneTreeRef.current ?: remember { OneTreeRef(tree) }.also { it.current = tree }, node, tagged)
         else when (node.type) {
             "input" -> RenderInput(tree,node,tagged)
             "appScaffold" -> RenderAppScaffold(tree,node,tagged)

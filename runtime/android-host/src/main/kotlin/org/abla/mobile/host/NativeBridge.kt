@@ -1108,12 +1108,25 @@ internal data class UiTree(
 
 internal class TreeBudget(var remainingNodes: Int = 4096)
 
+// Immutable once built, and equal to another node exactly when everything that renders it is the same: type, key, every
+// property (event and handler ids included) and its children, in order. Compose then skips an unchanged subtree of a new
+// tree instead of recomposing the whole screen on every update.
+@androidx.compose.runtime.Immutable
 internal data class UiNode(
     val type: String,
     val key: String,
     val properties: JSONObject,
     val children: List<UiNode>,
 ) {
+    // FNV-1a over a canonical form: type, key, the properties sorted by name with each value's type, then the children's
+    // fingerprints in order. Computed once, at construction.
+    val fingerprint: Long = uiNodeFingerprint(type, key, properties, children)
+
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is UiNode && fingerprint == other.fingerprint && key == other.key && type == other.type)
+
+    override fun hashCode(): Int = (fingerprint xor (fingerprint ushr 32)).toInt()
+
     fun text(name: String, fallback: String = ""): String =
         properties.optString(name, fallback)
 
@@ -1213,4 +1226,32 @@ internal data class UiNode(
             )
         }
     }
+}
+
+internal fun uiNodeFingerprint(type: String, key: String, properties: JSONObject, children: List<UiNode>): Long {
+    val values = mutableMapOf<String, Any?>()
+    properties.keys().forEach { name -> values[name] = properties.opt(name).let { if (it == JSONObject.NULL) null else it } }
+    return uiNodeFingerprint(type, key, values, children.map { it.fingerprint })
+}
+
+// The fingerprint itself, on plain values: a JVM test can check it without Android's JSONObject.
+internal fun uiNodeFingerprint(type: String, key: String, properties: Map<String, Any?>, children: List<Long>): Long {
+    var hash = -0x340d631b7bdddcdbL
+    fun mix(text: String) {
+        for (c in text) {
+            hash = (hash xor c.code.toLong()) * 0x100000001b3L
+        }
+        hash = (hash xor 0xff) * 0x100000001b3L
+    }
+    mix(type)
+    mix(key)
+    for (name in properties.keys.sorted()) {
+        val value = properties[name]
+        mix(name)
+        mix(when (value) { null -> "n"; is String -> "s"; is Boolean -> "b"; is Number -> "d"; else -> "o" })
+        mix(value?.toString() ?: "")
+    }
+    mix(children.size.toString())
+    for (child in children) mix(child.toString())
+    return hash
 }

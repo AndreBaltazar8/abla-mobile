@@ -195,18 +195,18 @@ private fun oneArrangementH(justify: String, gap: Dp): Arrangement.Horizontal = 
     else -> Arrangement.spacedBy(gap)
 }
 
-private fun oneSend(tree: UiTree, event: Int, payload: String = "") {
+private fun oneSend(tree: OneTreeRef, event: Int, payload: String = "") {
     if (event <= 0) return
-    if (!NativeBridge.sendEvent(tree.revision, event.toLong(), payload.toByteArray(Charsets.UTF_8))) {
+    if (!NativeBridge.sendEvent(tree.current.revision, event.toLong(), payload.toByteArray(Charsets.UTF_8))) {
         NativeBridge.fail("The Abla event queue is full or unavailable")
     }
 }
 
 // A field's change carries its whole value, so one still queued for the same
 // tree can be replaced: fast typing can't fill the queue or outrun the app.
-private fun oneSendChange(tree: UiTree, event: Int, value: String) {
+private fun oneSendChange(tree: OneTreeRef, event: Int, value: String) {
     if (event <= 0) return
-    if (!NativeBridge.sendChange(tree.revision, event.toLong(), value.toByteArray(Charsets.UTF_8))) {
+    if (!NativeBridge.sendChange(tree.current.revision, event.toLong(), value.toByteArray(Charsets.UTF_8))) {
         NativeBridge.fail("The Abla event queue is full or unavailable")
     }
 }
@@ -331,8 +331,16 @@ private fun RowScope.oneChild(child: UiNode): Modifier {
     return m
 }
 
+// The tree being shown, for the events its nodes send: one holder for the whole screen, whose identity never changes, so
+// passing it down doesn't make every node recompose when a new tree comes (UiNode's equality does the skipping). A node
+// left as it was reads the newest revision when it sends, which is the right one: it is unchanged in the newest tree.
+@androidx.compose.runtime.Stable
+internal class OneTreeRef(@Volatile var current: UiTree)
+
+internal val LocalOneTreeRef = androidx.compose.runtime.staticCompositionLocalOf<OneTreeRef?> { null }
+
 @Composable
-internal fun RenderOne(tree: UiTree, node: UiNode, modifier: Modifier) {
+internal fun RenderOne(tree: OneTreeRef, node: UiNode, modifier: Modifier) {
     val p = OneProps(node)
     when (node.type) {
         "one.column", "one.row", "one.scrollRow", "one.stack", "one.scroll", "one.pressable", "one.link" -> OneContainer(tree, node, p, modifier)
@@ -356,7 +364,7 @@ internal fun RenderOne(tree: UiTree, node: UiNode, modifier: Modifier) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+private fun OneContainer(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val press = p.ai("onPress")
@@ -558,7 +566,7 @@ private class OnePopoverPosition(val end: Boolean, val gap: Int, val margin: Int
 
 // A press outside and the back button close it, through the app.
 @Composable
-private fun OnePopover(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+private fun OnePopover(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     val latest by rememberUpdatedState(tree)
     val dismiss by rememberUpdatedState(p.ai("onDismiss"))
@@ -592,7 +600,7 @@ internal fun OneRemoteImage(source: String, authorization: String, fallback: Str
 }
 
 @Composable
-private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+private fun OneInput(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
     val model = p.a("value")
     var editing by remember(node.key) { mutableStateOf(model) }
     val interaction = remember { MutableInteractionSource() }
@@ -672,7 +680,7 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
 // `a.anchorId`, follows new items when already at the end, and reports the
 // largest fully visible `a.item` to `a.onVisible` while the activity is resumed.
 @Composable
-private fun OneFeed(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+private fun OneFeed(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
     val state = rememberLazyListState()
     var positioned by remember(node.key) { mutableStateOf(false) }
     var sent by remember(node.key) { mutableStateOf(0) }
@@ -722,12 +730,12 @@ private fun OneFeed(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier)
 }
 
 @Composable
-private fun OneNative(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier) {
+private fun OneNative(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
     val target = p.a("target")
     val fallback = node.children.lastOrNull()
     if (target == "android" || target == "mobile") {
         val props = try { JSONObject(p.a("props")) } catch (_: Exception) { JSONObject() }
-        RenderNode(tree, UiNode(p.a("nativeKind"), node.key, props, node.children.dropLast(1)), modifier)
+        RenderNode(tree.current, UiNode(p.a("nativeKind"), node.key, props, node.children.dropLast(1)), modifier)
     } else if (fallback != null) {
         RenderOne(tree, fallback, modifier)
     }
