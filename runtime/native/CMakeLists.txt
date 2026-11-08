@@ -34,104 +34,23 @@ function(abla_mobile_add_android_application target)
         PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE
     )
 
-    # Abla v0.2.22 and later compile the runtime into the application object,
-    # which then needs only libc. Older toolchains ship a C runtime that this
-    # library compiles in, with a target-ABI shim and Android memory hooks.
-    if(EXISTS "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime/abla_runtime.c")
-        set(abla_mobile_legacy_runtime TRUE)
-    else()
-        set(abla_mobile_legacy_runtime FALSE)
-    endif()
-
-    if(NOT abla_mobile_legacy_runtime)
-        add_library(${target} SHARED
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_app_host.c"
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_hosted.c"
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_panic.c"
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_effects.c"
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_requests.c"
-            "${application_object}"
-        )
-        find_library(abla_mobile_log_library log)
-        target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
-        target_compile_features(${target} PRIVATE c_std_11)
-        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
-        target_link_options(${target} PRIVATE
-            "-Wl,--version-script=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_exports.map"
-            "-Wl,--no-undefined"
-        )
-        target_link_libraries(${target} PRIVATE ${abla_mobile_log_library})
-        return()
-    endif()
-
-    set(abi_llvm
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_abi_aarch64.ll"
-    )
-    set(abi_object
-        "${CMAKE_CURRENT_BINARY_DIR}/${target}_value_abi_aarch64.o"
-    )
-    add_custom_command(
-        OUTPUT "${abi_object}"
-        COMMAND "${CMAKE_C_COMPILER}"
-            "--target=${CMAKE_C_COMPILER_TARGET}"
-            "--sysroot=${CMAKE_SYSROOT}"
-            -c "${abi_llvm}"
-            -o "${abi_object}"
-        DEPENDS "${abi_llvm}"
-        VERBATIM
-    )
-    set_source_files_properties(
-        "${abi_object}"
-        PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE
-    )
-
-    set(portable_runtime
-        "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime/abla_runtime.c"
-    )
+    # The runtime is written in Abla and compiled into the application object,
+    # which then needs only libc.
     add_library(${target} SHARED
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_android_platform.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_app_host.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_hosted.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_panic.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_effects.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_platform_requests.c"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_value_bridge.c"
-        "${abi_object}"
-        "${portable_runtime}"
         "${application_object}"
     )
-
     find_library(abla_mobile_log_library log)
-    target_include_directories(${target} PRIVATE
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
-        "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime"
-    )
-    file(STRINGS
-        "${ABLA_MOBILE_ABLA_COMPILER_ROOT}/runtime/abla_runtime.h"
-        abla_mobile_field_initialize_declaration
-        REGEX "abla_field_initialize"
-    )
-    if(NOT abla_mobile_field_initialize_declaration)
-        target_compile_definitions(${target} PRIVATE
-            ABLA_MOBILE_LEGACY_OBJECT_ABI=1
-        )
-    endif()
-    set_source_files_properties(
-        "${portable_runtime}"
-        PROPERTIES COMPILE_OPTIONS
-        "-include;${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_core_rename.h"
-    )
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
     target_compile_features(${target} PRIVATE c_std_11)
-    target_compile_options(${target} PRIVATE
-        -Wall
-        -Wextra
-        -Werror
-        -fvisibility=hidden
-    )
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
     target_link_options(${target} PRIVATE
-        -Wl,--exclude-libs,ALL
-        -Wl,--gc-sections
-        -Wl,--no-undefined
-        -Wl,--version-script=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_exports.map
+        "-Wl,--version-script=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/abla_mobile_exports.map"
+        "-Wl,--no-undefined"
     )
     target_link_libraries(${target} PRIVATE ${abla_mobile_log_library})
 endfunction()

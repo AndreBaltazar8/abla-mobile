@@ -130,26 +130,20 @@ The implementation uses the platform splash window and does not create a
 dedicated splash activity. This avoids a second splash and generates no
 application Kotlin.
 
-## Runtime models
+## Runtime
 
-`runtime/native/CMakeLists.txt` supports two kinds of Abla toolchain, chosen by
-what `ABLA_COMPILER_ROOT` contains:
+Abla's runtime (v0.2.22 and later) is written in Abla, so the application
+object already contains it and needs only libc. `runtime/native/CMakeLists.txt`
+links the object with `abla_mobile_hosted.c`. A runtime panic writes to
+standard error and exits; inside this library those calls are redirected to
+logcat and to the failure buffer that `abla_mobile_run_checked` reports, so
+the host still shows the failure screen. It also stubs `backtrace`, which
+Android lacks before API 33. The C runtime of older toolchains (`runtime/abla_runtime.c`,
+removed from ablac in `93ce196`) is no longer supported.
 
-- **C runtime** (toolchains up to the `cf126b5` runtime, used by the pinned
-  v0.2.2 Android toolchain): the root has `runtime/abla_runtime.c`. The
-  library compiles it in with the target-ABI value shim and the Android
-  allocation and collection hooks in `abla_mobile_android_platform.c`.
-- **Self-contained runtime** (Abla v0.2.22 and later, whose runtime is written
-  in Abla): the application object already contains the runtime and needs
-  only libc. The library adds `abla_mobile_hosted.c`. Under this model a
-  runtime panic writes to standard error and exits; inside this library those
-  calls are redirected to logcat and to the failure buffer that
-  `abla_mobile_run_checked` reports, so the host still shows the failure
-  screen. It also stubs `backtrace`, which Android lacks before API 33.
-
-Pass the matching runtime sources as `-PablaCompilerRoot`. For v0.2.22 that is
-`git archive 3da080eed592269c17297e0896a1f2a33a888d7f runtime stdlib` from
-ablac (abla-one's `tools/build-android.sh` does this).
+Pass the runtime sources as `-PablaCompilerRoot`: a release's
+`share/abla` or a checkout of ablac (abla-one's `tools/build-android.sh`
+archives `runtime` and `stdlib` from one).
 
 ## Abla One nodes
 
