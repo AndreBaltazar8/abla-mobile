@@ -57,6 +57,10 @@ internal object NativeBridge {
         ArrayBlockingQueue(32),
         { task -> Thread(task, "abla-mobile-http").apply { isDaemon = true } },
     )
+    // Requests and uploads queued or running: a test driver waits for none before it says the app is still.
+    @JvmStatic
+    fun pendingWork(): Int = requestExecutor.queue.size + requestExecutor.activeCount + uploadExecutor.queue.size + uploadExecutor.activeCount
+
     // Direct uploads take minutes for a large file: their own thread, so requests
     // keep moving meanwhile.
     private val uploadExecutor = ThreadPoolExecutor(
