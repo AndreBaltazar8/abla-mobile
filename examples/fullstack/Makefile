@@ -15,20 +15,10 @@ server:
 		-o $(BUILD_DIR)/server-build-driver --fast --no-cache
 	cd $(PROJECT_DIR) && $(COMPILER) build \
 		$(BUILD_DIR)/server.ab \
-		-o $(BUILD_DIR)/server --fast --no-cache
-	$(CC) -std=c11 -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-		-fno-stack-protector -ffunction-sections -fdata-sections \
-		-I$(ABLAC_DIR)/runtime -c $(ABLAC_DIR)/runtime/abla_runtime.c \
-		-o $(BUILD_DIR)/server.deploy-value-runtime.o
-	$(CC) -std=c11 -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
-		-fno-stack-protector -ffunction-sections -fdata-sections \
-		-I$(ABLAC_DIR)/runtime -c $(ABLAC_DIR)/runtime/abla_runtime_host.c \
-		-o $(BUILD_DIR)/server.deploy-host.o
-	$(CC) -r \
-		$(BUILD_DIR)/server.o \
-		$(BUILD_DIR)/server.deploy-host.o \
-		$(BUILD_DIR)/server.deploy-value-runtime.o \
-		-o $(BUILD_DIR)/server-prebuilt.o
+		-o $(BUILD_DIR)/server --fast --no-debug --no-cache
+	# Icy's abla-prebuilt service links this object on its musl image: the build leaves
+	# server.o beside the executable, and the runtime is already in it.
+	cp $(BUILD_DIR)/server.o $(BUILD_DIR)/server-prebuilt.o
 
 android:
 	cd $(PROJECT_DIR) && $(COMPILER) build \
