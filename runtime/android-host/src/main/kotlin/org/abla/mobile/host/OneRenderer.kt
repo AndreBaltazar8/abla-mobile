@@ -70,6 +70,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -349,7 +351,7 @@ private fun OneContainer(tree: UiTree, node: UiNode, p: OneProps, modifier: Modi
     }
     if (p.a("label").isNotEmpty()) m = m.semantics { contentDescription = p.a("label") }
     // A chip, tab or menu item that says whether it is chosen exposes it, so a screen reader and the test driver can tell (653).
-    oneSelectedSemantics(p.a("selected"))?.let { chosen -> m = m.semantics { selected = chosen } }
+    oneSelectedSemantics(p.a("selected"))?.let { chosen -> m = m.semantics { selected = chosen; if (press > 0) role = Role.RadioButton } }
     if (node.type == "one.scroll") m = m.verticalScroll(rememberScrollState())
     if (node.type == "one.scrollRow") m = m.horizontalScroll(rememberScrollState())
     m = m.onePadding(p)
