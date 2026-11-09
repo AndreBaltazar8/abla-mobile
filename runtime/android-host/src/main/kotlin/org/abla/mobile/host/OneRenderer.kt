@@ -656,7 +656,7 @@ private fun OneInput(tree: UiTree, node: UiNode, p: OneProps, modifier: Modifier
             // A field taller than one line starts its text at the top, as a textarea does, as far
             // down as it is from the left (as abla-one's desktop paints it).
             Box(
-                if (multiline) Modifier.fillMaxSize().padding(PaddingValues(
+                if (multiline) Modifier.fillMaxWidth().then(if (oneMultilineFillsHeight(p.s("height"), p.i("grow"))) Modifier.fillMaxHeight() else Modifier).padding(PaddingValues(
                     start = p.pad("Left"), top = maxOf(p.pad("Top"), p.pad("Left")), end = p.pad("Right"), bottom = p.pad("Bottom"),
                 )) else Modifier.onePadding(p),
                 contentAlignment = if (multiline) Alignment.TopStart else Alignment.CenterStart,
@@ -739,3 +739,11 @@ internal fun oneSelectedSemantics(value: String): Boolean? = when (value) {
     "false" -> false
     else -> null
 }
+
+/**
+ * Whether a multiline field's text area takes the field's whole height: only when the field has one of its own, set or
+ * grown into. A field sized by its text (a chat's composer) must not fill what it is given, or it takes the screen from
+ * the feed above it (aaa6986 did: NovaKind's chat showed no messages).
+ */
+internal fun oneMultilineFillsHeight(height: String, grow: Int): Boolean =
+    grow > 0 || height == "fill" || height.toIntOrNull()?.let { it > 0 } == true
