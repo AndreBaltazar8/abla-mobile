@@ -200,6 +200,12 @@ bridge falls back to the per-byte accessor for libraries built before it.
 - `FILEREAD`: url is a handle, body `{"offset", "length"}` (at most 256 KB);
   completes with `bodyBase64`.
 - `FILEDEL`: url is a handle.
+- `FILEPUT` (direct uploads): url is a picked handle, body (up to 1 MiB)
+  `{"first", "partBytes", "urls"}` with at most 100 `https://` URLs
+  (`http://127.0.0.1`/`localhost` for tests). Part n, the bytes from
+  `(n - 1) * partBytes`, is streamed to its URL with `PUT`, tried up to three
+  times; completes with `{"parts": [{"part", "etag"}]}` or a 502 naming the
+  failure. It runs on its own thread, so other requests keep moving.
 
 File handles are opaque and last for the process. Picked documents are read
 through the content resolver and never deleted; saved responses live in the
