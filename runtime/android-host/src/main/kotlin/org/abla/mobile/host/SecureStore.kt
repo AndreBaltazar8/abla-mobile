@@ -24,10 +24,14 @@ internal object SecureStore {
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
         val encoded = Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .putString(key, encoded)
-            .apply()
+        // On disk before the caller hears it is stored: the bridge calls this off the main thread, and a process
+        // killed after an apply() can lose the write (a pending invitation, a session).
+        check(
+            context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .putString(key, encoded)
+                .commit(),
+        ) { "secure value was not stored" }
     }
 
     fun get(context: Context, key: String): String? {
@@ -48,10 +52,12 @@ internal object SecureStore {
 
     fun delete(context: Context, key: String) {
         requireValidKey(key)
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .remove(key)
-            .apply()
+        check(
+            context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .remove(key)
+                .commit(),
+        ) { "secure value was not removed" }
     }
 
     private fun requireValidKey(key: String) {
