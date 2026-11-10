@@ -122,10 +122,10 @@ fun AblaMobileHost(
         is HostState.Failed -> FailureScreen(state, modifier)
         is HostState.Ready -> {
             val tree = state.tree
-            MaterialTheme(
-                colorScheme = if (tree.darkTheme) darkColorScheme() else
-                    lightColorScheme(),
-            ) {
+            // The same scheme instance while the theme is the same. A new one on every tree changes MaterialTheme's static
+            // locals, and Compose then recomposes the whole screen, skipping no unchanged node.
+            val scheme = remember(tree.darkTheme) { if (tree.darkTheme) darkColorScheme() else lightColorScheme() }
+            MaterialTheme(colorScheme = scheme) {
                 TreeScreen(
                     tree,
                     if (assistantSurface) {
