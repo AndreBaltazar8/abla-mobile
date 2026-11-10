@@ -124,7 +124,7 @@ fun AblaMobileHost(
             val tree = state.tree
             // The same scheme instance while the theme is the same. A new one on every tree changes MaterialTheme's static
             // locals, and Compose then recomposes the whole screen, skipping no unchanged node.
-            val scheme = remember(tree.darkTheme) { if (tree.darkTheme) darkColorScheme() else lightColorScheme() }
+            val scheme = remember(tree.darkTheme) { oneRootScheme(tree.darkTheme) }
             MaterialTheme(colorScheme = scheme) {
                 TreeScreen(
                     tree,
@@ -302,18 +302,8 @@ internal fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifie
             "theme" -> {
                 val base = MaterialTheme.colorScheme
                 // Kept while its colors are the same, as at the root: a new scheme recomposes everything below.
-                val colors = listOf("primary", "onPrimary", "surface", "onSurface", "muted", "outline").map { node.text(it) }
-                val scheme = remember(base, colors) {
-                    base.copy(
-                        primary = mobileColor(colors[0], base.primary),
-                        onPrimary = mobileColor(colors[1], base.onPrimary),
-                        secondary = mobileColor(colors[0], base.secondary),
-                        surface = mobileColor(colors[2], base.surface),
-                        onSurface = mobileColor(colors[3], base.onSurface),
-                        onSurfaceVariant = mobileColor(colors[4], base.onSurfaceVariant),
-                        outline = mobileColor(colors[5], base.outline),
-                    )
-                }
+                val colors = oneThemeNodeColors { node.text(it) }
+                val scheme = remember(base, colors) { oneThemeNodeScheme(base, colors) }
                 MaterialTheme(colorScheme = scheme) { node.children.firstOrNull()?.let { RenderNode(tree, it, tagged) } }
             }
             "column" -> RenderColumn(tree, node, tagged)
@@ -870,7 +860,7 @@ private fun RenderActionGrid(tree: UiTree, node: UiNode, modifier: Modifier) {
     }
 }
 
-private fun mobileColor(source: String, fallback: Color): Color {
+internal fun mobileColor(source: String, fallback: Color): Color {
     if (!source.startsWith("#")) return fallback
     return try {
         Color(android.graphics.Color.parseColor(source))
@@ -1115,3 +1105,21 @@ private fun RenderRichText(node: UiNode,modifier: Modifier) {
     }
     Text(text,modifier,color=Color(0xFF172D28),fontSize=15.sp,lineHeight=21.sp,inlineContent=inline)
 }
+
+// What the screen's color scheme is kept by (and rebuilt from): the theme flag at the root, a theme node's colors.
+internal fun oneRootScheme(dark: Boolean): androidx.compose.material3.ColorScheme =
+    if (dark) darkColorScheme() else lightColorScheme()
+
+internal fun oneThemeNodeColors(text: (String) -> String): List<String> =
+    listOf("primary", "onPrimary", "surface", "onSurface", "muted", "outline").map(text)
+
+internal fun oneThemeNodeScheme(base: androidx.compose.material3.ColorScheme, colors: List<String>): androidx.compose.material3.ColorScheme =
+    base.copy(
+        primary = mobileColor(colors[0], base.primary),
+        onPrimary = mobileColor(colors[1], base.onPrimary),
+        secondary = mobileColor(colors[0], base.secondary),
+        surface = mobileColor(colors[2], base.surface),
+        onSurface = mobileColor(colors[3], base.onSurface),
+        onSurfaceVariant = mobileColor(colors[4], base.onSurfaceVariant),
+        outline = mobileColor(colors[5], base.outline),
+    )
