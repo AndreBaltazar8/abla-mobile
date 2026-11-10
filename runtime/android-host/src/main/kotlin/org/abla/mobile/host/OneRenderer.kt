@@ -342,7 +342,16 @@ internal val LocalOneTreeRef = androidx.compose.runtime.staticCompositionLocalOf
 @Composable
 internal fun RenderOne(tree: OneTreeRef, node: UiNode, modifier: Modifier) {
     // Debug builds count the nodes that actually recomposed, for tests that an unchanged sibling is skipped.
-    if (NativeBridge.countingRecompositions()) androidx.compose.runtime.SideEffect { NativeBridge.recomposed(node.key) }
+    // Debug builds count each run, and say whether the node equalled the one this group last showed: an equal one
+    // running again means a skip was missed (694), which tests can require to be none.
+    if (NativeBridge.countingRecompositions()) {
+        val last = androidx.compose.runtime.remember { arrayOfNulls<UiNode>(1) }
+        androidx.compose.runtime.SideEffect {
+            val before = last[0]
+            last[0] = node
+            NativeBridge.recomposed(if (before != null && before == node) "${node.key} equal" else node.key)
+        }
+    }
     val p = OneProps(node)
     when (node.type) {
         "one.column", "one.row", "one.scrollRow", "one.stack", "one.scroll", "one.pressable", "one.link" -> OneContainer(tree, node, p, modifier)
