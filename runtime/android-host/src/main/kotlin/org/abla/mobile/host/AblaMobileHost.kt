@@ -301,15 +301,20 @@ internal fun RenderNode(tree: UiTree, node: UiNode, modifier: Modifier = Modifie
             "appScaffold" -> RenderAppScaffold(tree,node,tagged)
             "theme" -> {
                 val base = MaterialTheme.colorScheme
-                MaterialTheme(colorScheme = base.copy(
-                    primary = mobileColor(node.text("primary"), base.primary),
-                    onPrimary = mobileColor(node.text("onPrimary"), base.onPrimary),
-                    secondary = mobileColor(node.text("primary"), base.secondary),
-                    surface = mobileColor(node.text("surface"), base.surface),
-                    onSurface = mobileColor(node.text("onSurface"), base.onSurface),
-                    onSurfaceVariant = mobileColor(node.text("muted"), base.onSurfaceVariant),
-                    outline = mobileColor(node.text("outline"), base.outline),
-                )) { node.children.firstOrNull()?.let { RenderNode(tree, it, tagged) } }
+                // Kept while its colors are the same, as at the root: a new scheme recomposes everything below.
+                val colors = listOf("primary", "onPrimary", "surface", "onSurface", "muted", "outline").map { node.text(it) }
+                val scheme = remember(base, colors) {
+                    base.copy(
+                        primary = mobileColor(colors[0], base.primary),
+                        onPrimary = mobileColor(colors[1], base.onPrimary),
+                        secondary = mobileColor(colors[0], base.secondary),
+                        surface = mobileColor(colors[2], base.surface),
+                        onSurface = mobileColor(colors[3], base.onSurface),
+                        onSurfaceVariant = mobileColor(colors[4], base.onSurfaceVariant),
+                        outline = mobileColor(colors[5], base.outline),
+                    )
+                }
+                MaterialTheme(colorScheme = scheme) { node.children.firstOrNull()?.let { RenderNode(tree, it, tagged) } }
             }
             "column" -> RenderColumn(tree, node, tagged)
             "chatList" -> RenderChatList(tree,node,tagged)
