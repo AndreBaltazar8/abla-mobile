@@ -48,6 +48,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -380,13 +383,41 @@ private fun OneContainer(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: 
     val pressed by interaction.collectIsPressedAsState()
     val press = p.ai("onPress")
     val enabled = p.a("enabled") != "false"
-    var m = modifier.oneSize(p)
+    val hold = p.ai("onHold")
+    var held by remember { mutableStateOf(false) }
+    // First in the chain: a style that changes while it's held (a background) must not
+    // replace the gesture's node, which would end the gesture as if let go.
+    var m = modifier
+    // A control to hold (`holdable`): "down" when a finger lands, "up" when it lifts
+    // or the gesture is taken away. The latest tree and id, as the app renders
+    // again between the two.
+    if (hold > 0 && enabled) {
+        val holdTree by rememberUpdatedState(tree)
+        val holdEvent by rememberUpdatedState(hold)
+        m = m.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false).consume()
+                held = true
+                oneSend(holdTree, holdEvent, "down")
+                try {
+                    do {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
+                    } while (event.changes.any { it.pressed })
+                } finally {
+                    held = false
+                    oneSend(holdTree, holdEvent, "up")
+                }
+            }
+        }
+    }
+    m = m.oneSize(p)
     if (p.s("safeBottom") == "true") m = m.imePadding()
     // Links to the web open in the browser; in-page anchors have no meaning here.
     val href = p.a("href")
     val opens = node.type == "one.link" && (href.startsWith("https://") || href.startsWith("http://"))
     val uri = LocalUriHandler.current
-    m = m.oneBox(p, pressed = pressed && (press > 0 || opens))
+    m = m.oneBox(p, pressed = (pressed && (press > 0 || opens)) || held)
     if (press > 0 || opens) {
         m = m.clickable(
             interactionSource = interaction,

@@ -117,6 +117,10 @@ compile fun mobileAndroidInternetPermission(): string =
 compile fun mobileAndroidPostNotificationsPermission(): string =
     "android.permission.POST_NOTIFICATIONS"
 
+// The microphone: voice capture and dictation.
+compile fun mobileAndroidRecordAudioPermission(): string =
+    "android.permission.RECORD_AUDIO"
+
 compile fun mobileAndroidCameraPermission(): string =
     "android.permission.CAMERA"
 
@@ -272,10 +276,15 @@ compile fun mobileAndroidManifest(
     var manifest = "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n"
 
     var permission = 0
+    var microphone = false
     while (permission < configuration.permissions.size) {
         manifest = "$manifest    <uses-permission android:name=\"${mobileAndroidXml(configuration.permissions[permission])}\" />\n"
+        if (configuration.permissions[permission] == mobileAndroidRecordAudioPermission()) microphone = true
         permission = permission + 1
     }
+    // An app that listens may dictate (abla:speech): from Android 11 it sees the
+    // device's speech recognizer only when it says it looks for one.
+    if (microphone) manifest = "$manifest    <queries>\n        <intent>\n            <action android:name=\"android.speech.RecognitionService\" />\n        </intent>\n    </queries>\n"
 
     manifest = "$manifest\n    <application\n        android:allowBackup=\"${mobileAndroidBoolean(application.allowBackup)}\"\n        android:allowNativeHeapPointerTagging=\"false\"\n        android:label=\"@string/abla_mobile_app_name\"\n"
     if (branding.applicationIcon != "") {

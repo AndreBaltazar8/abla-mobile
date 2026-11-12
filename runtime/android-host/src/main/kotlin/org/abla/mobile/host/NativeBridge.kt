@@ -88,6 +88,8 @@ internal object NativeBridge {
     @Volatile private var applicationContext: Context? = null
     @Volatile private var activity: WeakReference<AblaMobileActivity>? = null
     @Volatile private var pendingVoicePermissionRequest = 0L
+    // An abla:mic start waiting for the person to allow the microphone.
+    @Volatile private var pendingMicPermissionRequest = 0L
     @Volatile private var pendingPushPermissionRequest = 0L
     @Volatile private var pendingVoiceMaxSeconds = 180
     @Volatile private var pendingAssistantRoleRequest = 0L
@@ -563,7 +565,57 @@ internal object NativeBridge {
         }
     }
 
+    // The microphone as a stream (MicStream). The request's body is {"op"}:
+    // "start" (asking for the microphone the first time), "read" and "stop",
+    // which answer {"pcm": base64 16 kHz mono s16le since the last, "level",
+    // "recording"}, and "cancel".
+    private fun micRequest(requestId: Long, spec: JSONObject, asked: Boolean = false) {
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "the microphone is unavailable")
+        val op = try { JSONObject(spec.optString("body", "{}")).optString("op") } catch (_: JSONException) { "" }
+        fun audio(bytes: ByteArray) = JSONObject()
+            .put("pcm", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+            .put("level", MicStream.level())
+            .put("recording", MicStream.active())
+            .toString()
+        when (op) {
+            "start" -> {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    if (asked) return completeHttp(requestId, 403, "", "microphone permission denied")
+                    val owner = activity?.get() ?: return completeHttp(requestId, 0, "", "the activity is unavailable")
+                    if (pendingMicPermissionRequest != 0L || pendingVoicePermissionRequest != 0L) {
+                        return completeHttp(requestId, 0, "", "a microphone permission request is active")
+                    }
+                    pendingMicPermissionRequest = requestId
+                    owner.runOnUiThread {
+                        ActivityCompat.requestPermissions(owner, arrayOf(Manifest.permission.RECORD_AUDIO),
+                            AblaMobileActivity.RECORD_AUDIO_REQUEST)
+                    }
+                    return
+                }
+                try {
+                    MicStream.start()
+                    completeHttp(requestId, 200, "{\"recording\":true}", "")
+                } catch (failure: Exception) {
+                    completeHttp(requestId, 0, "", failure.message ?: "could not start the microphone")
+                }
+            }
+            "read" -> completeHttp(requestId, 200, audio(MicStream.take()), "")
+            "stop" -> completeHttp(requestId, 200, audio(MicStream.stop()), "")
+            "cancel" -> { MicStream.cancel(); completeHttp(requestId, 204, "", "") }
+            else -> completeHttp(requestId, 0, "", "unknown microphone request")
+        }
+    }
+
     fun onRecordAudioPermissionResult(granted: Boolean) {
+        val mic = pendingMicPermissionRequest
+        if (mic != 0L) {
+            pendingMicPermissionRequest = 0L
+            if (!granted) completeHttp(mic, 403, "", "microphone permission denied")
+            else micRequest(mic, JSONObject().put("body", "{\"op\":\"start\"}"), true)
+            return
+        }
         val requestId = pendingVoicePermissionRequest
         val maxSeconds = pendingVoiceMaxSeconds
         pendingVoicePermissionRequest = 0L
@@ -782,6 +834,7 @@ internal object NativeBridge {
             return completeHttp(requestId, 0, "", "unsupported method")
         }
         if (url == "abla:push-token") return pushToken(requestId)
+        if (url == "abla:mic") return micRequest(requestId, spec)
         val uri = try { URI(url) } catch (_: Exception) { return completeHttp(requestId, 0, "", "invalid URL") }
         if (uri.scheme != "https" && uri.scheme != "http") return completeHttp(requestId, 0, "", "only http and https are allowed")
         val inline = try {
