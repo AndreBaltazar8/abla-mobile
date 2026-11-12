@@ -36,6 +36,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -364,7 +370,8 @@ internal fun RenderOne(tree: OneTreeRef, node: UiNode, modifier: Modifier) {
         "one.image" -> OneImage(node, p, modifier)
         "one.bitmap" -> OneBitmap(p, modifier)
         "one.popover" -> OnePopover(tree, node, p, modifier)
-        "one.input" -> OneInput(tree, node, p, modifier)
+        "one.input" -> if (p.a("multiline") == "true" && p.a("secure") != "true") OneMultilineInput(tree, node, p, modifier)
+            else OneInput(tree, node, p, modifier)
         "one.divider" -> Box(modifier.oneSize(p).fillMaxWidth().height(p.i("height", 1).dp).background(p.color("background") ?: Color(0x1F000000)))
         "one.spacer" -> Spacer(
             if (p.has("width") || p.has("height") || p.has("grow")) modifier.oneSize(p)
@@ -715,6 +722,115 @@ private fun OneInput(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modi
                 inner()
             }
         },
+    )
+}
+
+// A field of several lines, on TextFieldState so it owns its scrolling: Compose's field keeps a
+// selection handle inside what's in view, so a handle dragged to the first or last line in
+// view scrolls it a line on, and the next move of the finger reaches the line that came in.
+@Composable
+private fun OneMultilineInput(tree: OneTreeRef, node: UiNode, p: OneProps, modifier: Modifier) {
+    val model = p.a("value")
+    val state = remember(node.key) { TextFieldState(model) }
+    // The text the app knows: what it set, or what was last sent to it.
+    val known = remember(node.key) { arrayOf(model) }
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val echoes = remember(node.key) { OneInputEchoes(model) }
+    var sends by remember(node.key) { mutableStateOf(0) }
+    var expiredGeneration by remember(node.key) { mutableStateOf(-1) }
+    echoes.acceptModel(model, focused, expiredGeneration)?.let {
+        if (state.text.toString() != it) {
+            known[0] = it
+            state.setTextAndPlaceCursorAtEnd(it)
+        }
+    }
+    val generation = sends
+    LaunchedEffect(generation) {
+        if (echoes.hasPending) {
+            kotlinx.coroutines.delay(5000)
+            expiredGeneration = generation
+        }
+    }
+    val latestTree by rememberUpdatedState(tree)
+    val onChange by rememberUpdatedState(p.ai("onChange"))
+    LaunchedEffect(state) {
+        snapshotFlow { state.text.toString() }.collect { text ->
+            if (text != known[0]) {
+                known[0] = text
+                if (onChange > 0) {
+                    echoes.changed(text)
+                    sends = echoes.generation
+                }
+                oneSendChange(latestTree, onChange, text)
+            }
+        }
+    }
+    val scroll = rememberScrollState()
+    val layout = remember(node.key) { arrayOf<(() -> androidx.compose.ui.text.TextLayoutResult?)?>(null) }
+    LaunchedEffect(state) {
+        var before = state.selection
+        snapshotFlow { state.selection to state.text.toString() }.collect { (selection, text) ->
+            val previous = before
+            before = selection
+            // Only a selection being stretched: it was one already and kept one of its ends.
+            if (selection.collapsed || previous.collapsed || text != known[0]) return@collect
+            if (selection.start != previous.start && selection.end != previous.end) return@collect
+            val result = layout[0]?.invoke() ?: return@collect
+            val moving = if (selection.start != previous.start) selection.start else selection.end
+            val line = result.getLineForOffset(moving.coerceIn(0, text.length))
+            val top = result.getLineTop(line)
+            val bottom = result.getLineBottom(line)
+            val viewTop = scroll.value.toFloat()
+            val viewBottom = viewTop + scroll.viewportSize
+            // On the last line wholly in view, with more below: bring the next one in. And so above.
+            if (line < result.lineCount - 1 && result.getLineBottom(line + 1) > viewBottom + 1 && bottom > viewTop) {
+                // Straight away, not animated: the field's own scrolling would cancel an animation.
+                scroll.dispatchRawDelta(result.getLineBottom(line + 1) - viewBottom)
+                // A line at a time, at a pace the eye follows.
+                kotlinx.coroutines.delay(160)
+            } else if (line > 0 && result.getLineTop(line - 1) < viewTop - 1 && top < viewBottom) {
+                scroll.dispatchRawDelta(result.getLineTop(line - 1) - viewTop)
+                kotlinx.coroutines.delay(160)
+            }
+        }
+    }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submit = p.ai("onSubmit")
+    val style = oneTextStyle(p, 16)
+    BasicTextField(
+        state = state,
+        modifier = modifier.oneSize(p).oneBox(p, focused = focused)
+            .semantics { contentDescription = p.a("placeholder") },
+        enabled = p.a("enabled") != "false",
+        inputTransformation = InputTransformation.maxLength(p.ai("maxLength", 4000)),
+        textStyle = style,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (p.a("keyboard") == "email") KeyboardType.Email else KeyboardType.Text,
+            imeAction = if (submit > 0) ImeAction.Done else ImeAction.Default,
+        ),
+        onKeyboardAction = KeyboardActionHandler {
+            if (submit > 0) {
+                keyboard?.hide()
+                oneSend(tree, submit)
+            }
+        },
+        lineLimits = TextFieldLineLimits.MultiLine(1, p.i("maxLines", 5)),
+        onTextLayout = { getResult -> layout[0] = getResult },
+        interactionSource = interaction,
+        cursorBrush = SolidColor(p.color("caretColor") ?: style.color),
+        decorator = { inner ->
+            Box(
+                Modifier.fillMaxWidth().then(if (oneMultilineFillsHeight(p.s("height"))) Modifier.fillMaxHeight() else Modifier).padding(PaddingValues(
+                    start = p.pad("Left"), top = maxOf(p.pad("Top"), p.pad("Left")), end = p.pad("Right"), bottom = p.pad("Bottom"),
+                )),
+                contentAlignment = Alignment.TopStart,
+            ) {
+                if (state.text.isEmpty()) Text(p.a("placeholder"), style = style.copy(color = p.color("placeholderColor") ?: style.color.copy(alpha = .5f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                inner()
+            }
+        },
+        scrollState = scroll,
     )
 }
 
