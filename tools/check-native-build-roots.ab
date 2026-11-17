@@ -1,4 +1,8 @@
 import "native_build_roots.ab"
+import "abla/io"
+import "abla/fs"
+import "abla/process"
+import "abla/text"
 
 fun main: int {
     if (processArgumentCount() == 3 && processArgument(0) == "mirror") return if (nativeRootsMirror(Path(processArgument(1)),Path(processArgument(2)))) 0 else 1

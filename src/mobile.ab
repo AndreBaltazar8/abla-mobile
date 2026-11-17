@@ -1,8 +1,8 @@
 import "abla/compiler/parser"
 import "abla/json"
-import "protocol.ab"
-import "runtime.ab"
-import "ui.ab"
+export import "protocol.ab"
+export import "runtime.ab"
+export import "ui.ab"
 
 // The runtime value produced by a `$mobile` template. The generated template
 // is a single FnMut state machine: event 0 renders only, while a positive event

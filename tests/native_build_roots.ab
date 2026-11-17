@@ -1,5 +1,6 @@
 import "abla/test"
 import "../tools/native_build_roots.ab"
+import "abla/fs"
 
 fun main: int {
     expect(nativeRootsForbidden("include(\"../../abla-mobile/runtime/native\")"), "old mobile sibling escape is rejected")
