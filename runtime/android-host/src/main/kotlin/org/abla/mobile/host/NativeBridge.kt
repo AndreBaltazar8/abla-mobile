@@ -90,6 +90,9 @@ internal object NativeBridge {
     @Volatile private var pendingVoicePermissionRequest = 0L
     // An abla:mic start waiting for the person to allow the microphone.
     @Volatile private var pendingMicPermissionRequest = 0L
+    // An abla:call start waiting for the same, with what it was asked.
+    @Volatile private var pendingCallPermissionRequest = 0L
+    @Volatile private var pendingCallSpec: JSONObject? = null
     @Volatile private var pendingPushPermissionRequest = 0L
     @Volatile private var pendingVoiceMaxSeconds = 180
     @Volatile private var pendingAssistantRoleRequest = 0L
@@ -608,7 +611,66 @@ internal object NativeBridge {
         }
     }
 
+    // A voice call (CallSession), body {op}:
+    //   start {key, model, speaker}: connects with the short-lived key, opens the
+    //     microphone (asking for it first) and the speaker
+    //   events: {events, state, error, playing}: what came since the last look
+    //   send {events}: to the model
+    //   end {drain}: hangs up, at once or once what the model said has been heard
+    //   speaker {on}
+    private fun callRequest(requestId: Long, spec: JSONObject, asked: Boolean = false) {
+        val context = applicationContext ?: return completeHttp(requestId, 0, "", "calls are unavailable")
+        val body = try { JSONObject(spec.optString("body", "{}")) } catch (_: JSONException) { JSONObject() }
+        when (body.optString("op")) {
+            "start" -> {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    if (asked) return completeHttp(requestId, 403, "", "microphone permission denied")
+                    val owner = activity?.get() ?: return completeHttp(requestId, 0, "", "the activity is unavailable")
+                    if (pendingCallPermissionRequest != 0L || pendingMicPermissionRequest != 0L || pendingVoicePermissionRequest != 0L) {
+                        return completeHttp(requestId, 0, "", "a microphone permission request is active")
+                    }
+                    pendingCallPermissionRequest = requestId
+                    pendingCallSpec = spec
+                    owner.runOnUiThread {
+                        ActivityCompat.requestPermissions(owner, arrayOf(Manifest.permission.RECORD_AUDIO),
+                            AblaMobileActivity.RECORD_AUDIO_REQUEST)
+                    }
+                    return
+                }
+                val key = body.optString("key")
+                if (key.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
+                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", true))
+                completeHttp(requestId, 200, "{\"state\":\"connecting\"}", "")
+            }
+            "events" -> completeHttp(requestId, 200, CallSession.take().toString(), "")
+            "send" -> {
+                CallSession.send(body.optJSONArray("events") ?: org.json.JSONArray())
+                completeHttp(requestId, 204, "", "")
+            }
+            "end" -> {
+                CallSession.end(body.optBoolean("drain", false))
+                completeHttp(requestId, 204, "", "")
+            }
+            "speaker" -> {
+                CallSession.speaker(body.optBoolean("on", true))
+                completeHttp(requestId, 204, "", "")
+            }
+            else -> completeHttp(requestId, 0, "", "unknown call request")
+        }
+    }
+
     fun onRecordAudioPermissionResult(granted: Boolean) {
+        val call = pendingCallPermissionRequest
+        if (call != 0L) {
+            val spec = pendingCallSpec ?: JSONObject()
+            pendingCallPermissionRequest = 0L
+            pendingCallSpec = null
+            if (!granted) completeHttp(call, 403, "", "microphone permission denied")
+            else callRequest(call, spec, true)
+            return
+        }
         val mic = pendingMicPermissionRequest
         if (mic != 0L) {
             pendingMicPermissionRequest = 0L
@@ -835,6 +897,7 @@ internal object NativeBridge {
         }
         if (url == "abla:push-token") return pushToken(requestId)
         if (url == "abla:mic") return micRequest(requestId, spec)
+        if (url == "abla:call") return callRequest(requestId, spec)
         val uri = try { URI(url) } catch (_: Exception) { return completeHttp(requestId, 0, "", "invalid URL") }
         if (uri.scheme != "https" && uri.scheme != "http") return completeHttp(requestId, 0, "", "only http and https are allowed")
         val inline = try {
