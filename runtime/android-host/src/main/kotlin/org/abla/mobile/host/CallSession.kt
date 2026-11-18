@@ -21,6 +21,7 @@ import java.io.OutputStream
 import java.security.SecureRandom
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.withLock
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -55,8 +56,10 @@ internal object CallSession {
     @Volatile private var state = "idle"
     @Volatile private var problem = ""
     private var socket: SSLSocket? = null
+    @Volatile private var line: java.net.Socket? = null
     private var output: OutputStream? = null
-    private val writeLock = Any()
+    // Taken to write a frame; never waited on by the watch, as a dead line can hold it.
+    private val writeLock = java.util.concurrent.locks.ReentrantLock()
     private val events = ArrayList<JSONObject>()
     private var recorder: AudioRecord? = null
     private var track: AudioTrack? = null
@@ -67,7 +70,9 @@ internal object CallSession {
     private val playLock = Any()
     private val ring = ByteArray(ringBytes)
     // Bytes the microphone sent since the call began; the model counts its milliseconds from these.
-    private var micBytes = 0L
+    @Volatile private var micBytes = 0L
+    // When OpenAI last sent anything; a ping every few seconds makes it answer even in silence.
+    @Volatile private var heardAt = 0L
     private var speechFrom = 0L
     private var audioManager: AudioManager? = null
     private var previousMode = AudioManager.MODE_NORMAL
@@ -221,10 +226,39 @@ internal object CallSession {
         } else stop("ended")
     }
 
+    // The connection broke while the call was on: the call stays up (Telecom, the audio), and
+    // waits for the app to bring a new key (`reconnect`), the conversation so far in its session.
+    private fun dropped(why: String?) {
+        try { line?.close() } catch (_: Exception) {}
+        writeLock.withLock {
+            try { socket?.close() } catch (_: Exception) {}
+            socket = null
+            line = null
+            output = null
+        }
+        playQueue.clear()
+        synchronized(playLock) {
+            try { track?.pause(); track?.flush(); track?.play() } catch (_: Exception) {}
+            played.clear()
+            writtenFrames = 0
+        }
+        problem = "the connection dropped: ${why ?: "closed"}"
+        state = "reconnecting"
+        note("$problem; reconnecting")
+    }
+
+    // A new connection for the call, with a key for a session that knows what was said.
+    fun reconnect(key: String, model: String) {
+        if (!running.get() || state != "reconnecting") return
+        state = "connecting again"
+        Thread({ run(key, model, again = true) }, "abla-call").apply { isDaemon = true; start() }
+    }
+
     @Synchronized
     private fun stop(final: String) {
         if (!running.getAndSet(false)) return
         if (state != "failed") state = final
+        try { line?.close() } catch (_: Exception) {}
         try { socket?.close() } catch (_: Exception) {}
         try { recorder?.stop() } catch (_: Exception) {}
         recorder?.release()
@@ -254,18 +288,33 @@ internal object CallSession {
         stop("failed")
     }
 
-    private fun run(key: String, model: String) {
+    private fun run(key: String, model: String, again: Boolean = false) {
         try {
             connect(key, model)
         } catch (failure: Exception) {
-            return fail("couldn't reach OpenAI: ${failure.message}")
+            if (!again) return fail("couldn't reach OpenAI: ${failure.message}")
+            if (!running.get()) return
+            problem = "couldn't reconnect: ${failure.message}"
+            state = "reconnecting"
+            return note(problem)
+        }
+        if (!running.get()) {
+            writeLock.withLock { try { socket?.close() } catch (_: Exception) {} }
+            return
+        }
+        // The new session counts its milliseconds from now.
+        if (again) {
+            micBytes = 0
+            problem = ""
+            note("reconnected")
         }
         state = "live"
-        startAudio()
+        if (!again) startAudio()
+        watch(socket)
         try {
             read()
         } catch (failure: Exception) {
-            if (running.get()) fail("the call broke: ${failure.message}")
+            if (running.get()) return dropped(failure.message)
         }
         if (running.get()) stop("ended")
     }
@@ -273,7 +322,10 @@ internal object CallSession {
     // ---- The WebSocket ----
 
     private fun connect(key: String, model: String) {
-        val opened = SSLSocketFactory.getDefault().createSocket("api.openai.com", 443) as SSLSocket
+        // The plain socket under TLS is kept, to cut a dead line without waiting on TLS.
+        val plain = java.net.Socket()
+        plain.connect(java.net.InetSocketAddress("api.openai.com", 443), 10_000)
+        val opened = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, "api.openai.com", 443, true) as SSLSocket
         opened.soTimeout = 15_000
         opened.startHandshake()
         val nonce = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -292,8 +344,39 @@ internal object CallSession {
         val status = head.toString("ISO-8859-1").lineSequence().first()
         check(status.contains(" 101 ")) { "OpenAI refused the call: $status" }
         opened.soTimeout = 0
-        socket = opened
-        output = opened.outputStream
+        writeLock.withLock {
+            socket = opened
+            line = plain
+            output = opened.outputStream
+        }
+    }
+
+    // A line that went dead without a word (out of signal) never errors on its own: one that
+    // doesn't answer a ping for this long is closed, and the call reconnects.
+    private fun watch(watched: SSLSocket?) {
+        heardAt = System.currentTimeMillis()
+        val plain = line
+        Thread({
+            while (running.get() && socket === watched && watched != null) {
+                try { Thread.sleep(5_000) } catch (_: InterruptedException) { return@Thread }
+                if (!running.get() || socket !== watched) return@Thread
+                if (System.currentTimeMillis() - heardAt > 15_000) {
+                    note("no answer from OpenAI for 15 s")
+                    try { plain?.close() } catch (_: Exception) {}
+                    return@Thread
+                }
+                // Busy writing (or stuck on a dead line): no ping this time.
+                if (!writeLock.tryLock()) continue
+                try {
+                    val mask = ByteArray(4).also { SecureRandom().nextBytes(it) }
+                    output?.write(byteArrayOf(0x89.toByte(), 0x80.toByte()) + mask)
+                    output?.flush()
+                } catch (_: Exception) {
+                } finally {
+                    writeLock.unlock()
+                }
+            }
+        }, "abla-call-watch").apply { isDaemon = true; start() }
     }
 
     private fun write(text: String) {
@@ -308,7 +391,7 @@ internal object CallSession {
         val mask = ByteArray(4).also { SecureRandom().nextBytes(it) }
         frame.write(mask)
         for (index in payload.indices) frame.write(payload[index].toInt() xor mask[index and 3].toInt())
-        synchronized(writeLock) {
+        writeLock.withLock {
             try {
                 output?.write(frame.toByteArray())
                 output?.flush()
@@ -332,6 +415,7 @@ internal object CallSession {
         val message = ByteArrayOutputStream()
         while (running.get()) {
             val head = readFully(input, 2)
+            heardAt = System.currentTimeMillis()
             val final = head[0].toInt() and 0x80 != 0
             val opcode = head[0].toInt() and 0x0f
             var size = (head[1].toInt() and 0x7f).toLong()
@@ -349,7 +433,7 @@ internal object CallSession {
                     }
                 }
                 8 -> return
-                9 -> synchronized(writeLock) {
+                9 -> writeLock.withLock {
                     // A pong, with the ping's payload.
                     val frame = ByteArrayOutputStream()
                     frame.write(0x8a); frame.write(0x80 or payload.size)
@@ -490,6 +574,8 @@ internal object CallSession {
                 if (got < 0) return
                 at += got
             }
+            // Between connections, what's said goes nowhere.
+            if (output == null) continue
             for (index in frame.indices) ring[((micBytes + index) % ringBytes).toInt()] = frame[index]
             micBytes += frame.size
             write(JSONObject().put("type", "input_audio_buffer.append")

@@ -629,7 +629,9 @@ internal object NativeBridge {
     // A voice call (CallSession), body {op}:
     //   start {key, model, speaker}: connects with the short-lived key, opens the
     //     microphone (asking for it first) and the speaker
-    //   events: {events, state, error, playing}: what came since the last look
+    //   events: {events, state, error, playing}: what came since the last look; state
+    //     "reconnecting" when the connection broke mid-call and the call waits for a new key
+    //   reconnect {key, model}: connects again with it, the call's audio carrying on
     //   send {events}: to the model
     //   end {drain}: hangs up, at once or once what the model said has been heard
     //   speaker {on}
@@ -660,6 +662,12 @@ internal object NativeBridge {
                 completeHttp(requestId, 200, "{\"state\":\"connecting\"}", "")
             }
             "events" -> completeHttp(requestId, 200, CallSession.take().toString(), "")
+            "reconnect" -> {
+                val key = body.optString("key")
+                if (key.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
+                CallSession.reconnect(key, body.optString("model", "gpt-realtime-2.1"))
+                completeHttp(requestId, 204, "", "")
+            }
             "send" -> {
                 CallSession.send(body.optJSONArray("events") ?: org.json.JSONArray())
                 completeHttp(requestId, 204, "", "")
