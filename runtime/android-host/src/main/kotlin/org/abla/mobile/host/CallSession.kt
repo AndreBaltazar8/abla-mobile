@@ -76,26 +76,40 @@ internal object CallSession {
 
     fun running(): Boolean = running.get()
 
+    @Volatile var handler: AblaCallHandler? = null
+    private var handled = false
+    // Hung up by André outside the app (a car, a headset, the call's notification).
+    @Volatile private var hungUp = false
+
+    fun hangUp() {
+        if (!running.get()) return
+        hungUp = true
+        stop("ended")
+    }
+
     private var appContext: Context? = null
 
     @Synchronized
-    fun start(context: Context, key: String, model: String, speaker: Boolean, title: String = "On a call") {
+    fun start(context: Context, key: String, model: String, speaker: Boolean, title: String = "On a call", caller: String = "") {
         end(false)
         problem = ""
+        hungUp = false
         state = "connecting"
         synchronized(events) { events.clear() }
         playQueue.clear()
         synchronized(playLock) { played.clear(); writtenFrames = 0 }
         micBytes = 0
         running.set(true)
+        appContext = context.applicationContext
+        handled = try { handler?.started(context.applicationContext, title, caller) == true } catch (_: Exception) { false }
         audioManager = (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).also {
             previousMode = it.mode
-            it.mode = AudioManager.MODE_IN_COMMUNICATION
+            // The system sets it for a call it knows about.
+            if (!handled) it.mode = AudioManager.MODE_IN_COMMUNICATION
         }
-        appContext = context.applicationContext
         speaker(speaker)
         Thread({ run(key, model) }, "abla-call").apply { isDaemon = true; start() }
-        CallService.begin(context.applicationContext, title)
+        if (!handled) CallService.begin(context.applicationContext, title)
     }
 
     // On the loudspeaker, or held to the ear like a phone call: a headset or Bluetooth when
@@ -103,6 +117,10 @@ internal object CallSession {
     @Synchronized
     fun speaker(on: Boolean) {
         val manager = audioManager ?: return
+        if (handled) {
+            val atEar = try { handler?.speaker(on) } catch (_: Exception) { null }
+            if (atEar != null) return nearEar(atEar)
+        }
         var held = !on
         if (Build.VERSION.SDK_INT >= 31) {
             val devices = manager.availableCommunicationDevices
@@ -147,7 +165,7 @@ internal object CallSession {
             events.clear()
         }
         return JSONObject().put("events", list).put("state", state).put("error", problem)
-            .put("playing", playingMs() > 0)
+            .put("playing", playingMs() > 0).put("hungUp", hungUp)
     }
 
     fun send(list: JSONArray) {
@@ -183,12 +201,16 @@ internal object CallSession {
         playQueue.clear()
         nearEar(false)
         audioManager?.let {
-            if (Build.VERSION.SDK_INT >= 31) it.clearCommunicationDevice()
-            @Suppress("DEPRECATION")
-            it.isSpeakerphoneOn = false
-            it.mode = previousMode
+            if (!handled) {
+                if (Build.VERSION.SDK_INT >= 31) it.clearCommunicationDevice()
+                @Suppress("DEPRECATION")
+                it.isSpeakerphoneOn = false
+                it.mode = previousMode
+            }
         }
         audioManager = null
+        if (handled) try { handler?.ended() } catch (_: Exception) {}
+        handled = false
         appContext?.let { CallService.finish(it) }
     }
 

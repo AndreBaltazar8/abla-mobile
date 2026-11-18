@@ -131,6 +131,21 @@ internal object NativeBridge {
 
     external fun start(): Boolean
 
+    // A link for the app with no screen: started if it isn't running, without an activity,
+    // as for a call answered from a car. Its screen catches up when it's opened.
+    fun openUrl(context: Context, uri: String) {
+        attachContext(context)
+        if (!start()) return
+        val payload = JSONObject().put("kind", "openUrl").put("url", uri).toString().toByteArray(Charsets.UTF_8)
+        Thread {
+            repeat(1000) {
+                val revision = heldRevision() ?: (state.value as? HostState.Ready)?.tree?.revision
+                if (revision != null && sendEvent(revision, 2_147_483_647L, payload)) return@Thread
+                Thread.sleep(10)
+            }
+        }.start()
+    }
+
     @JvmName("sendEvent")
     private external fun sendEventNative(
         revision: Long,
@@ -641,7 +656,7 @@ internal object NativeBridge {
                 }
                 val key = body.optString("key")
                 if (key.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
-                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", false), body.optString("title", "On a call"))
+                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", false), body.optString("title", "On a call"), body.optString("caller", ""))
                 completeHttp(requestId, 200, "{\"state\":\"connecting\"}", "")
             }
             "events" -> completeHttp(requestId, 200, CallSession.take().toString(), "")
