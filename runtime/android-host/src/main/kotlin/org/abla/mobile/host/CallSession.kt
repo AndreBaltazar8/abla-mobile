@@ -2,6 +2,7 @@ package org.abla.mobile.host
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -9,6 +10,8 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.os.Build
+import android.os.PowerManager
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
@@ -88,17 +91,52 @@ internal object CallSession {
         audioManager = (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).also {
             previousMode = it.mode
             it.mode = AudioManager.MODE_IN_COMMUNICATION
-            @Suppress("DEPRECATION")
-            it.isSpeakerphoneOn = speaker
         }
-        Thread({ run(key, model) }, "abla-call").apply { isDaemon = true; start() }
         appContext = context.applicationContext
+        speaker(speaker)
+        Thread({ run(key, model) }, "abla-call").apply { isDaemon = true; start() }
         CallService.begin(context.applicationContext, title)
     }
 
+    // On the loudspeaker, or held to the ear like a phone call: a headset or Bluetooth when
+    // there is one, else the earpiece, with the screen off while it's against the face.
+    @Synchronized
     fun speaker(on: Boolean) {
-        @Suppress("DEPRECATION")
-        audioManager?.isSpeakerphoneOn = on
+        val manager = audioManager ?: return
+        var held = !on
+        if (Build.VERSION.SDK_INT >= 31) {
+            val devices = manager.availableCommunicationDevices
+            val headset = devices.firstOrNull {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
+            }
+            val wanted = if (on) devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                else headset ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+            if (wanted != null) manager.setCommunicationDevice(wanted) else manager.clearCommunicationDevice()
+            if (!on && headset != null) held = false
+        } else {
+            @Suppress("DEPRECATION")
+            manager.isSpeakerphoneOn = on
+        }
+        nearEar(held)
+    }
+
+    private var proximity: PowerManager.WakeLock? = null
+
+    private fun nearEar(on: Boolean) {
+        if (!on) {
+            try { proximity?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
+            proximity = null
+            return
+        }
+        if (proximity != null) return
+        val power = appContext?.getSystemService(PowerManager::class.java) ?: return
+        if (!power.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) return
+        proximity = try {
+            power.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "abla:call").also { it.acquire(4 * 60 * 60 * 1000L) }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     // The events that came since the last look, and how the call is.
@@ -143,7 +181,9 @@ internal object CallSession {
         track?.release()
         track = null
         playQueue.clear()
+        nearEar(false)
         audioManager?.let {
+            if (Build.VERSION.SDK_INT >= 31) it.clearCommunicationDevice()
             @Suppress("DEPRECATION")
             it.isSpeakerphoneOn = false
             it.mode = previousMode

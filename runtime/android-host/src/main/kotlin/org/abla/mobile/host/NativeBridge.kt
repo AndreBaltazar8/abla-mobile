@@ -641,7 +641,7 @@ internal object NativeBridge {
                 }
                 val key = body.optString("key")
                 if (key.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
-                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", true), body.optString("title", "On a call"))
+                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", false), body.optString("title", "On a call"))
                 completeHttp(requestId, 200, "{\"state\":\"connecting\"}", "")
             }
             "events" -> completeHttp(requestId, 200, CallSession.take().toString(), "")
