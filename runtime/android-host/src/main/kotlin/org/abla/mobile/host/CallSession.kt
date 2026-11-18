@@ -71,8 +71,12 @@ internal object CallSession {
 
     fun state(): String = state
 
+    fun running(): Boolean = running.get()
+
+    private var appContext: Context? = null
+
     @Synchronized
-    fun start(context: Context, key: String, model: String, speaker: Boolean) {
+    fun start(context: Context, key: String, model: String, speaker: Boolean, title: String = "On a call") {
         end(false)
         problem = ""
         state = "connecting"
@@ -88,6 +92,8 @@ internal object CallSession {
             it.isSpeakerphoneOn = speaker
         }
         Thread({ run(key, model) }, "abla-call").apply { isDaemon = true; start() }
+        appContext = context.applicationContext
+        CallService.begin(context.applicationContext, title)
     }
 
     fun speaker(on: Boolean) {
@@ -143,6 +149,7 @@ internal object CallSession {
             it.mode = previousMode
         }
         audioManager = null
+        appContext?.let { CallService.finish(it) }
     }
 
     private fun fail(message: String) {
