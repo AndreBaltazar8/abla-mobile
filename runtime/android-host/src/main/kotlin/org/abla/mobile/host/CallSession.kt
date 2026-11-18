@@ -80,11 +80,44 @@ internal object CallSession {
     private var handled = false
     // Hung up by André outside the app (a car, a headset, the call's notification).
     @Volatile private var hungUp = false
+    @Volatile private var hungUpWhy = ""
 
-    fun hangUp() {
+    fun hangUp(why: String = "") {
         if (!running.get()) return
+        hungUpWhy = why
         hungUp = true
         stop("ended")
+    }
+
+    // Something worth knowing about the call on the phone, for the other side's log.
+    fun note(text: String) {
+        if (!running.get()) return
+        synchronized(events) { events.add(JSONObject().put("type", "phone.note").put("text", text)) }
+    }
+
+    private fun describe(device: AudioDeviceInfo?): String {
+        if (device == null) return "none"
+        val kind = when (device.type) {
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "earpiece"
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "loudspeaker"
+            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "phone mic"
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth call audio"
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth media"
+            AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth LE"
+            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired headset"
+            AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> "USB audio"
+            AudioDeviceInfo.TYPE_TELEPHONY -> "telephony"
+            else -> "type ${device.type}"
+        }
+        return "$kind (${device.productName})"
+    }
+
+    private fun modeName(): String = when (audioManager?.mode) {
+        AudioManager.MODE_IN_COMMUNICATION -> "in communication"
+        AudioManager.MODE_IN_CALL -> "in call"
+        AudioManager.MODE_NORMAL -> "normal"
+        AudioManager.MODE_RINGTONE -> "ringtone"
+        else -> "${audioManager?.mode}"
     }
 
     private var appContext: Context? = null
@@ -94,6 +127,7 @@ internal object CallSession {
         end(false)
         problem = ""
         hungUp = false
+        hungUpWhy = ""
         state = "connecting"
         synchronized(events) { events.clear() }
         playQueue.clear()
@@ -165,7 +199,7 @@ internal object CallSession {
             events.clear()
         }
         return JSONObject().put("events", list).put("state", state).put("error", problem)
-            .put("playing", playingMs() > 0).put("hungUp", hungUp)
+            .put("playing", playingMs() > 0).put("hungUp", hungUp).put("hungUpWhy", hungUpWhy)
     }
 
     fun send(list: JSONArray) {
@@ -418,6 +452,8 @@ internal object CallSession {
             if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(mic.audioSessionId)?.enabled = true
             recorder = mic
             mic.startRecording()
+            note("mic: ${describe(mic.routedDevice)}, echo canceller ${if (AcousticEchoCanceler.isAvailable()) "on" else "unavailable"}")
+            mic.addOnRoutingChangedListener({ routing: AudioRecord -> note("mic now: ${describe(routing.routedDevice)}") }, android.os.Handler(android.os.Looper.getMainLooper()))
             Thread({ capture(mic) }, "abla-call-mic").apply { isDaemon = true; start() }
         } else {
             mic?.release()
@@ -436,6 +472,8 @@ internal object CallSession {
         if (speaker != null && speaker.state == AudioTrack.STATE_INITIALIZED) {
             track = speaker
             speaker.play()
+            note("speaker: ${describe(speaker.routedDevice)}, audio mode ${modeName()}${if (handled) ", a Telecom call" else ""}")
+            speaker.addOnRoutingChangedListener({ routing: AudioTrack -> note("speaker now: ${describe(routing.routedDevice)}, audio mode ${modeName()}") }, android.os.Handler(android.os.Looper.getMainLooper()))
             Thread({ play(speaker) }, "abla-call-speaker").apply { isDaemon = true; start() }
         } else {
             speaker?.release()
