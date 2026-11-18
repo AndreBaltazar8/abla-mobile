@@ -79,6 +79,14 @@ internal object CallSession {
     private var speechFrom = 0L
     private var audioManager: AudioManager? = null
     private var previousMode = AudioManager.MODE_NORMAL
+    // The app looks at the call a few times a second (`take`); a call nobody follows any more
+    // (the app's view gone, or stuck) ends, so the phone isn't left on a call for hours.
+    @Volatile private var takenAt = 0L
+    // When the line dropped, while it's being brought back.
+    @Volatile private var droppedAt = 0L
+    private var generation = 0
+    private const val UNFOLLOWED_FOR = 120_000L
+    private const val RECONNECT_FOR = 120_000L
 
     fun state(): String = state
 
@@ -141,7 +149,10 @@ internal object CallSession {
         playQueue.clear()
         synchronized(playLock) { played.clear(); writtenFrames = 0 }
         micBytes = 0
+        takenAt = System.currentTimeMillis()
+        droppedAt = 0L
         running.set(true)
+        guard(++generation)
         appContext = context.applicationContext
         handled = try { handler?.started(context.applicationContext, title, caller) == true } catch (_: Exception) { false }
         audioManager = (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).also {
@@ -201,6 +212,7 @@ internal object CallSession {
 
     // The events that came since the last look, and how the call is.
     fun take(): JSONObject {
+        takenAt = System.currentTimeMillis()
         val list = JSONArray()
         synchronized(events) {
             for (event in events) list.put(event)
@@ -246,6 +258,7 @@ internal object CallSession {
             writtenFrames = 0
         }
         problem = "the connection dropped: ${why ?: "closed"}"
+        if (droppedAt == 0L) droppedAt = System.currentTimeMillis()
         state = "reconnecting"
         note("$problem; reconnecting")
     }
@@ -285,6 +298,20 @@ internal object CallSession {
         appContext?.let { CallService.finish(it) }
     }
 
+    // Ends the call, whatever the app does, when nobody follows it any more or its line
+    // doesn't come back.
+    private fun guard(mine: Int) {
+        Thread({
+            while (running.get() && generation == mine) {
+                try { Thread.sleep(5_000) } catch (_: InterruptedException) { return@Thread }
+                if (!running.get() || generation != mine) return@Thread
+                val now = System.currentTimeMillis()
+                if (now - takenAt > UNFOLLOWED_FOR) return@Thread fail("the app stopped following the call for ${UNFOLLOWED_FOR / 1000} s")
+                if (droppedAt != 0L && now - droppedAt > RECONNECT_FOR) return@Thread fail("the line didn't come back in ${RECONNECT_FOR / 1000} s")
+            }
+        }, "abla-call-guard").apply { isDaemon = true; start() }
+    }
+
     private fun fail(message: String) {
         problem = message
         state = "failed"
@@ -312,6 +339,7 @@ internal object CallSession {
             note("reconnected")
         }
         opening = true
+        droppedAt = 0L
         state = "live"
         if (!again) startAudio()
         watch(socket)
