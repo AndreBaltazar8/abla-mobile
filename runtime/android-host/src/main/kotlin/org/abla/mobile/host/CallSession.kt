@@ -73,6 +73,9 @@ internal object CallSession {
     @Volatile private var micBytes = 0L
     // When OpenAI last sent anything; a ping every few seconds makes it answer even in silence.
     @Volatile private var heardAt = 0L
+    // The model's first response on each connection plays out whatever is heard over it (a
+    // "hello?", the phone lifted to the ear): the other side opens its session the same way.
+    @Volatile private var opening = true
     private var speechFrom = 0L
     private var audioManager: AudioManager? = null
     private var previousMode = AudioManager.MODE_NORMAL
@@ -308,6 +311,7 @@ internal object CallSession {
             problem = ""
             note("reconnected")
         }
+        opening = true
         state = "live"
         if (!again) startAudio()
         watch(socket)
@@ -454,8 +458,9 @@ internal object CallSession {
             }
             "input_audio_buffer.speech_started" -> {
                 speechFrom = event.optLong("audio_start_ms")
-                interrupted()
+                if (!opening) interrupted()
             }
+            "response.done" -> opening = false
             "input_audio_buffer.speech_stopped" -> said(event)
         }
         if (event.optString("type") in forwarded) synchronized(events) { events.add(event) }
