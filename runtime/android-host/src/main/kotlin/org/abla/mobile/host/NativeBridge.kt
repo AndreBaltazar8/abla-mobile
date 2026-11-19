@@ -657,8 +657,10 @@ internal object NativeBridge {
                     return
                 }
                 val key = body.optString("key")
-                if (key.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
-                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", false), body.optString("title", "On a call"), body.optString("caller", ""))
+                // Through the relay: the call runs on the app's computer, and this is its microphone and speaker.
+                val relay = body.optString("relay")
+                if (key.isEmpty() && relay.isEmpty()) return completeHttp(requestId, 0, "", "no key for the call")
+                CallSession.start(context, key, body.optString("model", "gpt-realtime-2.1"), body.optBoolean("speaker", false), body.optString("title", "On a call"), body.optString("caller", ""), relay, body.optString("token"))
                 completeHttp(requestId, 200, "{\"state\":\"connecting\"}", "")
             }
             "events" -> completeHttp(requestId, 200, CallSession.take().toString(), "")
