@@ -25,45 +25,21 @@ import kotlin.concurrent.withLock
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
-// A voice call with an OpenAI Realtime model (abla:call): the connection, the microphone
-// and the speaker, here on the phone, so what's said is heard at once. The app supplies a
-// short-lived key, and holds the rest of the call (the instructions, the tools) elsewhere:
-// it takes the events that matter with `events`, and sends what's needed with `send`.
-//
-// What's done here, for speed:
-// - The microphone (24 kHz mono 16-bit, the platform's echo cancelling and noise
-//   suppression) goes straight to the model.
-// - The model's audio is played as it comes.
-// - When the person speaks over it, the playing stops and the model is told how much was
-//   heard (conversation.item.truncate).
-// - When the person stops speaking, what they said goes with the event, as 16 kHz PCM,
-//   for the app to have written down.
-//
-// Or, given a relay (`relay`, `token`), the call runs on the app's own computer and this is
-// only its microphone and speaker: one WebSocket to the relay, 16 kHz mono 16-bit audio in
-// binary frames both ways, and a little JSON in text frames ({"t":"note"} from here,
-// {"t":"end"} from there). A dropped line is joined again from here, to the same stream.
+// A voice call (abla:call) whose other side runs elsewhere, on the app's own computer: this
+// is its microphone and speaker, here on the phone. One WebSocket to a relay (`relay`, with
+// the app's `token`) carries 16 kHz mono 16-bit audio in binary frames both ways, and a
+// little JSON in text frames ({"t":"note"} from here, {"t":"end"} from there). The
+// microphone has the platform's echo cancelling and noise suppression. A dropped line is
+// joined again from here, to the same stream, while the call goes on there.
 internal object CallSession {
-    private const val realtimeRate = 24_000
-    private const val relayRate = 16_000
-    @Volatile private var rate = realtimeRate
-    private val bytesPerMs get() = rate / 500
-    private val frameBytes get() = rate / 25 * 2
-    // Ninety seconds of what the microphone sent, to cut what was said from.
-    private const val ringBytes = realtimeRate * 2 * 90
-    // What's said is sent with the event up to twenty seconds of it.
-    private const val segmentBytes = realtimeRate * 2 * 20
-    // Through the relay: its URL (wss://…/call-audio?stream=…) and the app's token, or "".
+    private const val rate = 16_000
+    private const val bytesPerMs = rate / 500
+    private const val frameBytes = rate / 25 * 2
+    // The relay's URL (wss://…/call-audio?stream=…) and the app's token.
     @Volatile private var relay = ""
     @Volatile private var relayToken = ""
-    private fun relayed() = relay != ""
     // How far behind the speaker may fall before quiet audio is skipped to catch up.
     private const val behindMs = 400L
-    private val forwarded = setOf(
-        "session.created", "error", "input_audio_buffer.speech_started", "input_audio_buffer.speech_stopped",
-        "conversation.item.added", "conversation.item.created", "response.created", "response.done",
-        "response.output_audio_transcript.done", "conversation.item.input_audio_transcription.completed",
-    )
 
     private val running = AtomicBoolean(false)
     @Volatile private var state = "idle"
@@ -76,20 +52,12 @@ internal object CallSession {
     private val events = ArrayList<JSONObject>()
     private var recorder: AudioRecord? = null
     private var track: AudioTrack? = null
-    private val playQueue = LinkedBlockingQueue<Pair<String, ByteArray>>()
-    // What was handed to the speaker since the last flush, by item, in frames.
-    private val played = ArrayList<Pair<String, Long>>()
+    private val playQueue = LinkedBlockingQueue<ByteArray>()
+    // Frames handed to the speaker since the last flush.
     private var writtenFrames = 0L
     private val playLock = Any()
-    private val ring = ByteArray(ringBytes)
-    // Bytes the microphone sent since the call began; the model counts its milliseconds from these.
-    @Volatile private var micBytes = 0L
-    // When OpenAI last sent anything; a ping every few seconds makes it answer even in silence.
+    // When the relay last sent anything; it sends audio all the time.
     @Volatile private var heardAt = 0L
-    // The model's first response on each connection plays out whatever is heard over it (a
-    // "hello?", the phone lifted to the ear): the other side opens its session the same way.
-    @Volatile private var opening = true
-    private var speechFrom = 0L
     private var audioManager: AudioManager? = null
     private var previousMode = AudioManager.MODE_NORMAL
     // The app looks at the call a few times a second (`take`); a call nobody follows any more
@@ -121,7 +89,7 @@ internal object CallSession {
     // Something worth knowing about the call on the phone, for the other side's log.
     fun note(text: String) {
         if (!running.get()) return
-        if (relayed() && output != null) return write(JSONObject().put("t", "note").put("text", text).toString())
+        if (output != null) return write(JSONObject().put("t", "note").put("text", text).toString())
         synchronized(events) { events.add(JSONObject().put("type", "phone.note").put("text", text)) }
     }
 
@@ -153,19 +121,17 @@ internal object CallSession {
     private var appContext: Context? = null
 
     @Synchronized
-    fun start(context: Context, key: String, model: String, speaker: Boolean, title: String = "On a call", caller: String = "", relayUrl: String = "", token: String = "") {
+    fun start(context: Context, relayUrl: String, token: String, speaker: Boolean, title: String = "On a call", caller: String = "") {
         end(false)
         relay = relayUrl
         relayToken = token
-        rate = if (relayUrl != "") relayRate else realtimeRate
         problem = ""
         hungUp = false
         hungUpWhy = ""
         state = "connecting"
         synchronized(events) { events.clear() }
         playQueue.clear()
-        synchronized(playLock) { played.clear(); writtenFrames = 0 }
-        micBytes = 0
+        synchronized(playLock) { writtenFrames = 0 }
         takenAt = System.currentTimeMillis()
         droppedAt = 0L
         running.set(true)
@@ -178,7 +144,7 @@ internal object CallSession {
             if (!handled) it.mode = AudioManager.MODE_IN_COMMUNICATION
         }
         speaker(speaker)
-        Thread({ run(key, model) }, "abla-call").apply { isDaemon = true; start() }
+        Thread({ run() }, "abla-call").apply { isDaemon = true; start() }
         if (!handled) CallService.begin(context.applicationContext, title)
     }
 
@@ -239,14 +205,7 @@ internal object CallSession {
             .put("playing", playingMs() > 0).put("hungUp", hungUp).put("hungUpWhy", hungUpWhy)
     }
 
-    fun send(list: JSONArray) {
-        for (index in 0 until list.length()) {
-            val event = list.optJSONObject(index) ?: continue
-            write(event.toString())
-        }
-    }
-
-    // Hangs up: at once, or once what the model said has been heard.
+    // Hangs up: at once, or once what the other side said has been heard.
     fun end(drain: Boolean) {
         if (!running.get()) return
         if (drain) {
@@ -259,7 +218,7 @@ internal object CallSession {
     }
 
     // The connection broke while the call was on: the call stays up (Telecom, the audio), and
-    // waits for the app to bring a new key (`reconnect`), the conversation so far in its session.
+    // the phone joins the relay's stream again; the call is still on at the computer.
     private fun dropped(why: String?) {
         try { line?.close() } catch (_: Exception) {}
         writeLock.withLock {
@@ -271,15 +230,13 @@ internal object CallSession {
         playQueue.clear()
         synchronized(playLock) {
             try { track?.pause(); track?.flush(); track?.play() } catch (_: Exception) {}
-            played.clear()
             writtenFrames = 0
         }
         problem = "the connection dropped: ${why ?: "closed"}"
         if (droppedAt == 0L) droppedAt = System.currentTimeMillis()
         state = "reconnecting"
         note("$problem; reconnecting")
-        // Through the relay, the call is still on at the computer: the phone joins it again.
-        if (relayed()) rejoin()
+        rejoin()
     }
 
     // Joins the relay's stream again in a moment, as many times as it takes.
@@ -288,23 +245,16 @@ internal object CallSession {
             try { Thread.sleep(2_000) } catch (_: InterruptedException) {}
             if (running.get() && state == "reconnecting") {
                 state = "connecting again"
-                run("", "", again = true)
+                run(again = true)
             }
         }, "abla-call").apply { isDaemon = true; start() }
-    }
-
-    // A new connection for the call, with a key for a session that knows what was said.
-    fun reconnect(key: String, model: String) {
-        if (!running.get() || state != "reconnecting") return
-        state = "connecting again"
-        Thread({ run(key, model, again = true) }, "abla-call").apply { isDaemon = true; start() }
     }
 
     @Synchronized
     private fun stop(final: String) {
         if (!running.get()) return
         // The computer hears it at once, not when the app next asks.
-        if (relayed() && output != null) write(JSONObject().put("t", "end").put("why", if (hungUpWhy != "") "André hung up ($hungUpWhy)" else if (final == "failed") problem else "André hung up").toString())
+        if (output != null) write(JSONObject().put("t", "end").put("why", if (hungUpWhy != "") "André hung up ($hungUpWhy)" else if (final == "failed") problem else "André hung up").toString())
         if (!running.getAndSet(false)) return
         if (state != "failed") state = final
         try { line?.close() } catch (_: Exception) {}
@@ -351,30 +301,27 @@ internal object CallSession {
         stop("failed")
     }
 
-    private fun run(key: String, model: String, again: Boolean = false) {
+    private fun run(again: Boolean = false) {
         try {
-            connect(key, model)
+            connect()
         } catch (failure: Exception) {
-            if (!again) return fail("couldn't reach ${if (relayed()) "the relay" else "OpenAI"}: ${failure.message}")
+            if (!again) return fail("couldn't reach the relay: ${failure.message}")
             if (!running.get()) return
             problem = "couldn't reconnect: ${failure.message}"
             state = "reconnecting"
             note(problem)
-            // Through the relay it tries again by itself, until the guard gives up on it.
-            if (relayed()) rejoin()
+            // It tries again by itself, until the guard gives up on it.
+            rejoin()
             return
         }
         if (!running.get()) {
             writeLock.withLock { try { socket?.close() } catch (_: Exception) {} }
             return
         }
-        // The new session counts its milliseconds from now.
         if (again) {
-            micBytes = 0
             problem = ""
             note("reconnected")
         }
-        opening = true
         droppedAt = 0L
         state = "live"
         if (!again) startAudio()
@@ -385,18 +332,17 @@ internal object CallSession {
             if (running.get()) return dropped(failure.message)
         }
         // The relay closing the line isn't the call ending: only the computer says that ({"t":"end"}).
-        if (running.get() && relayed()) return dropped("the relay closed the line")
-        if (running.get()) stop("ended")
+        if (running.get()) dropped("the relay closed the line")
     }
 
     // ---- The WebSocket ----
 
-    private fun connect(key: String, model: String) {
-        val target = if (relayed()) java.net.URI(relay) else null
-        val host = target?.host ?: "api.openai.com"
-        val port = if (target != null && target.port > 0) target.port else 443
-        val where = if (target != null) "${target.rawPath}${if (target.rawQuery != null) "?${target.rawQuery}" else ""}" else "/v1/realtime?model=$model"
-        val bearer = if (relayed()) relayToken else key
+    private fun connect() {
+        val target = java.net.URI(relay)
+        val host = target.host
+        val port = if (target.port > 0) target.port else 443
+        val where = "${target.rawPath}${if (target.rawQuery != null) "?${target.rawQuery}" else ""}"
+        val bearer = relayToken
         // The plain socket under TLS is kept, to cut a dead line without waiting on TLS.
         val plain = java.net.Socket()
         plain.connect(java.net.InetSocketAddress(host, port), 10_000)
@@ -417,7 +363,7 @@ internal object CallSession {
             head.write(byte)
         }
         val status = head.toString("ISO-8859-1").lineSequence().first()
-        check(status.contains(" 101 ")) { "${if (relayed()) "the relay" else "OpenAI"} refused the call: $status" }
+        check(status.contains(" 101 ")) { "the relay refused the call: $status" }
         opened.soTimeout = 0
         writeLock.withLock {
             socket = opened
@@ -426,19 +372,19 @@ internal object CallSession {
         }
     }
 
-    // A line that went dead without a word (out of signal) never errors on its own: one that
-    // doesn't answer a ping for this long is closed, and the call reconnects.
+    // A line that went dead without a word (out of signal) never errors on its own: the relay's
+    // carries audio all the time, so a few seconds of nothing is a dead line, closed so the
+    // call reconnects.
     private fun watch(watched: SSLSocket?) {
         heardAt = System.currentTimeMillis()
         val plain = line
         Thread({
-            // The relay's line carries audio all the time: a few seconds of nothing is a dead line.
-            val patience = if (relayed()) 6_000L else 15_000L
+            val patience = 6_000L
             while (running.get() && socket === watched && watched != null) {
-                try { Thread.sleep(if (relayed()) 2_000 else 5_000) } catch (_: InterruptedException) { return@Thread }
+                try { Thread.sleep(2_000) } catch (_: InterruptedException) { return@Thread }
                 if (!running.get() || socket !== watched) return@Thread
                 if (System.currentTimeMillis() - heardAt > patience) {
-                    note("no answer from ${if (relayed()) "the relay" else "OpenAI"} for ${patience / 1000} s")
+                    note("no answer from the relay for ${patience / 1000} s")
                     try { plain?.close() } catch (_: Exception) {}
                     return@Thread
                 }
@@ -502,16 +448,15 @@ internal object CallSession {
             check(size < 64L * 1024 * 1024) { "a message too big" }
             val payload = readFully(input, size.toInt())
             when (opcode) {
-                // The computer's voice, through the relay.
-                2 -> if (relayed()) playQueue.put("" to payload)
+                // The computer's voice.
+                2 -> playQueue.put(payload)
                 0, 1 -> {
                     message.write(payload)
                     if (final) {
                         val text = message.toString("UTF-8")
                         message.reset()
                         val event = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
-                        if (!relayed()) received(event)
-                        else if (event.optString("t") == "end") {
+                        if (event.optString("t") == "end") {
                             problem = event.optString("why")
                             stop("ended")
                             return
@@ -532,22 +477,6 @@ internal object CallSession {
         }
     }
 
-    private fun received(event: JSONObject) {
-        when (event.optString("type")) {
-            "response.output_audio.delta", "response.audio.delta" -> {
-                playQueue.put(event.optString("item_id") to Base64.decode(event.optString("delta"), Base64.DEFAULT))
-                return
-            }
-            "input_audio_buffer.speech_started" -> {
-                speechFrom = event.optLong("audio_start_ms")
-                if (!opening) interrupted()
-            }
-            "response.done" -> opening = false
-            "input_audio_buffer.speech_stopped" -> said(event)
-        }
-        if (event.optString("type") in forwarded) synchronized(events) { events.add(event) }
-    }
-
     // ---- The speaker ----
 
     private fun playingMs(): Long {
@@ -558,59 +487,7 @@ internal object CallSession {
         }
     }
 
-    // The person spoke over the model: stop, and tell it where they cut it off.
-    private fun interrupted() {
-        val audio = track ?: return
-        playQueue.clear()
-        synchronized(playLock) {
-            val heard = audio.playbackHeadPosition.toLong() and 0xffffffffL
-            if (writtenFrames - heard > rate / 10) {
-                audio.pause()
-                audio.flush()
-                var start = 0L
-                for ((item, frames) in played) {
-                    if (heard < start + frames) {
-                        write(JSONObject().put("type", "conversation.item.truncate").put("item_id", item)
-                            .put("content_index", 0).put("audio_end_ms", (heard - start) * 1000 / rate).toString())
-                        break
-                    }
-                    start += frames
-                }
-                played.clear()
-                writtenFrames = 0
-                audio.play()
-            }
-        }
-    }
-
     // ---- The microphone ----
-
-    private fun said(event: JSONObject) {
-        val end = event.optLong("audio_end_ms") * bytesPerMs
-        var from = speechFrom * bytesPerMs
-        if (end - from > segmentBytes) from = end - segmentBytes
-        if (from < micBytes - ringBytes) from = micBytes - ringBytes
-        if (end <= from || end > micBytes) return
-        val segment = ByteArray((end - from).toInt() and 1.inv())
-        for (index in segment.indices) segment[index] = ring[((from + index) % ringBytes).toInt()]
-        event.put("pcm", Base64.encodeToString(downsample(segment), Base64.NO_WRAP)).put("rate", 16_000)
-    }
-
-    // 24 kHz to 16 kHz: two samples for every three.
-    private fun downsample(pcm: ByteArray): ByteArray {
-        val samples = pcm.size / 2
-        fun at(index: Int): Int = ((pcm[index * 2 + 1].toInt() shl 8) or (pcm[index * 2].toInt() and 255)).toShort().toInt()
-        val out = ByteArrayOutputStream(samples * 4 / 3 + 4)
-        var index = 0
-        while (index * 3 / 2 < samples - 1) {
-            val position = index * 3 / 2
-            val value = if ((index * 3) % 2 == 1) (at(position) + at(position + 1)) / 2 else at(position)
-            out.write(value and 255)
-            out.write((value shr 8) and 255)
-            index += 1
-        }
-        return out.toByteArray()
-    }
 
     private fun startAudio() {
         val minimum = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -663,14 +540,7 @@ internal object CallSession {
             }
             // Between connections, what's said goes nowhere.
             if (output == null) continue
-            if (relayed()) {
-                writeFrame(frame, 0x82)
-                continue
-            }
-            for (index in frame.indices) ring[((micBytes + index) % ringBytes).toInt()] = frame[index]
-            micBytes += frame.size
-            write(JSONObject().put("type", "input_audio_buffer.append")
-                .put("audio", Base64.encodeToString(frame, Base64.NO_WRAP)).toString())
+            writeFrame(frame, 0x82)
         }
     }
 
@@ -689,15 +559,11 @@ internal object CallSession {
 
     private fun play(speaker: AudioTrack) {
         while (running.get()) {
-            val (item, pcm) = try { playQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: InterruptedException) { null } ?: continue
+            val pcm = try { playQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: InterruptedException) { null } ?: continue
             // The relay's line is a steady stream: when the network held some back and it comes
             // in a burst, the speaker falls behind for good unless it skips the quiet bits.
-            if (relayed() && playingMs() + playQueue.sumOf { it.second.size } / bytesPerMs > behindMs && peak(pcm) < 600) continue
-            synchronized(playLock) {
-                if (played.isNotEmpty() && played.last().first == item) played[played.size - 1] = item to (played.last().second + pcm.size / 2)
-                else played.add(item to (pcm.size / 2).toLong())
-                writtenFrames += pcm.size / 2
-            }
+            if (playingMs() + playQueue.sumOf { it.size } / bytesPerMs > behindMs && peak(pcm) < 600) continue
+            synchronized(playLock) { writtenFrames += pcm.size / 2 }
             var at = 0
             while (at < pcm.size && running.get()) {
                 val done = speaker.write(pcm, at, pcm.size - at)
