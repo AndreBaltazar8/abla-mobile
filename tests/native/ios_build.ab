@@ -1,10 +1,22 @@
 // Provisional552 integration fixture, excluded from the released045/046 gates
 // until the compiler's actual iOS build APIs have landed in a usable candidate.
-import "../../src/ios_build.ab"
-val accepted = #mobileBuildIos(mobileIosConfiguration(
-    "mobile-ios-loop", "tests/native/mobile_loop_ios.ab", "build/ios-native-loop",
-    "runtime/ios-host/AppHeaders"
-))
+// Build from the repository root on macOS with Xcode.
+import "abla/ios/build"
+import "../../src/ios_slices.ab"
+
+compile fun buildIosFixture(): bool {
+    val output = "build/ios-native-loop"
+    if (!mobileBuildIosSlices("mobile-ios-loop", "mobile_loop_ios.ab", "../../$output")) return false
+    // v0.2.66 resolves the archive build relative to this file and packaging relative to the working directory.
+    iosCreateXcframework(
+        "$output/AblaApp.xcframework",
+        ["$output/ios-arm64/libabla_app.a", "$output/ios-arm64-simulator/libabla_app.a"],
+        "runtime/ios-host/AppHeaders"
+    )
+}
+
+val accepted = #buildIosFixture()
+
 fun main(): int {
     if (!accepted) return 1
     0

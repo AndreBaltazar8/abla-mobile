@@ -2,8 +2,8 @@ import "../src/android_build.ab"
 
 val panicAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
     "abla-mobile-panic-proof",
-    "tests/native/android_panic.ab",
-    "examples/showcase/android-app",
+    "native/android_panic.ab",
+    "../examples/showcase/android-app",
     "panic",
     mobileAndroidApplication(
         "org.abla.mobile.panicproof",
