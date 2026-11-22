@@ -3,8 +3,8 @@ import "../src/android_build.ab"
 val variantsBuilt = #mobileBuildAndroidConfigurations([
     MobileAndroidConfiguration(
         "variant-fixture-debug",
-        "tests/native/mobile_loop.ab",
-        "build/android-variants-module",
+        "native/mobile_loop.ab",
+        "../build/android-variants-module",
         "debug",
         mobileAndroidApplication(
             "org.abla.mobile.variants.debug",
@@ -20,8 +20,8 @@ val variantsBuilt = #mobileBuildAndroidConfigurations([
     ),
     MobileAndroidConfiguration(
         "variant-fixture-release",
-        "tests/native/mobile_loop.ab",
-        "build/android-variants-module",
+        "native/mobile_loop.ab",
+        "../build/android-variants-module",
         "release",
         mobileAndroidApplication(
             "org.abla.mobile.variants",

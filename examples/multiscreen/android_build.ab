@@ -2,8 +2,8 @@ import "../../src/android_build.ab"
 
 val multiscreenAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
     "abla-mobile-multiscreen",
-    "examples/multiscreen/mobile/app.ab",
-    "examples/multiscreen/android-app",
+    "mobile/app.ab",
+    "android-app",
     "debug",
     mobileAndroidApplication(
         "org.abla.mobile.multiscreen",

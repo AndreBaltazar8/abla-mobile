@@ -2,8 +2,8 @@ import "../../src/android_build.ab"
 
 val fullstackAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
     "abla-mobile-fullstack",
-    "examples/fullstack/mobile/app.ab",
-    "examples/fullstack/android-app",
+    "mobile/app.ab",
+    "android-app",
     "debug",
     mobileAndroidApplication(
         "org.abla.mobile.fullstack",

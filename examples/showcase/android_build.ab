@@ -2,8 +2,8 @@ import "../../src/android_build.ab"
 
 val showcaseAndroid = #mobileBuildAndroid(MobileAndroidConfiguration(
     "abla-mobile-showcase",
-    "examples/showcase/mobile/app.ab",
-    "examples/showcase/android-app",
+    "mobile/app.ab",
+    "android-app",
     "debug",
     mobileAndroidApplication(
         "org.abla.mobile.showcase",

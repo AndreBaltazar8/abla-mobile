@@ -6,7 +6,7 @@ import "abla/compiler"
 
 compile fun configureFullstackServer(): void {
     mobileWriteRpcServer(
-        "examples/fullstack/build/server.ab",
+        "./build/server.ab",
         "../backend/service.ab",
         "service",
         8080
