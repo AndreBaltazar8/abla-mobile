@@ -1,7 +1,7 @@
 name: iOS host contracts
 on:
   push:
-    branches: [feat/ios-host]
+    branches: [main, feat/ios-host]
     paths:
       - runtime/ios-host/**
       - runtime/native/abla_mobile_ios_abi.c
