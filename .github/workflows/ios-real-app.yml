@@ -24,12 +24,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: AndreBaltazar8/abla-one
-          ref: 0ab017ff459d71c603c0b649cdd5739b3bae8ef6
+          ref: 00b31de0282d7c3d51ee00361086901687cb8071
           path: abla-one
           persist-credentials: false
-      - uses: AndreBaltazar8/setup-abla@13c3fdc74b5961bf2d281b25c47e4b9ace18d11e
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          version: 0.2.48
+          repository: AndreBaltazar8/abla-ui
+          ref: 467e1ee22de8b159250d62d961e5c0a3ea89c58c
+          path: abla-ui
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: AndreBaltazar8/abla-graphics
+          ref: 0b37b34f557274c4c9a85698b60d96e3dfd06254
+          path: abla-graphics
+          persist-credentials: false
+      - uses: AndreBaltazar8/setup-abla@f13f659af61ed16f0f2568964ff5b5f3344ec70a # main, signed Abla v0.2.67 support
+        with:
+          version: 0.2.67
       - name: Prepare evidence directory
         run: mkdir -p "$RUNNER_TEMP/ios-real-evidence"
       - name: Record exact source and compiler provenance
@@ -42,7 +54,7 @@ jobs:
             ablac --version
             shasum -a 256 "$(command -v ablac)"
           } | tee "$RUNNER_TEMP/ios-real-evidence/versions.txt"
-      - name: Run all One contracts with released 0.2.48
+      - name: Run all One contracts with released 0.2.67
         id: contracts
         continue-on-error: true
         working-directory: abla-one
