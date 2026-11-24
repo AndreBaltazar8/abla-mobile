@@ -32,6 +32,21 @@
 typedef int64_t (*AblaHostCallback)(void *context, int64_t value);
 typedef int64_t (*AblaMobileRun)(void);
 typedef int64_t (*AblaFailureByte)(int64_t index);
+
+// ablac's struct abla_android_host, version 1: the bionic functions libabla_app.so calls, in this order.
+struct abla_android_host {
+    uint64_t version;
+    uint64_t count;
+    int (*key_create)(pthread_key_t *, void (*)(void *));
+    void *(*getspecific)(pthread_key_t);
+    int (*setspecific)(pthread_key_t, const void *);
+    int (*create)(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
+    int (*join)(pthread_t, void **);
+};
+typedef int64_t (*AblaHostInstall)(const struct abla_android_host *host);
+static const struct abla_android_host abla_host_table = {
+    1, 5, pthread_key_create, pthread_getspecific, pthread_setspecific, pthread_create, pthread_join
+};
 typedef int64_t (*AblaPlatformAttach)(
     AblaHostCallback callback,
     void *context
@@ -457,6 +472,21 @@ static void *abla_mobile_thread(void *unused) {
     void *library = dlopen("libabla_app.so", RTLD_NOW | RTLD_LOCAL);
     if (library == NULL) {
         abla_publish_failure(ABLA_FAILURE_STARTUP, dlerror());
+        return NULL;
+    }
+    // An arm64 libabla_app.so imports nothing from bionic: it calls these five through a table its host installs before
+    // the first export (ablac decision #121; the layout is struct abla_android_host in ablac's generated abla-app.h).
+    // A library without abla_android_host_install (an x86_64 one, or one from an older ablac) imports them itself.
+    AblaHostInstall install_host = (AblaHostInstall)dlsym(
+        library,
+        "abla_android_host_install"
+    );
+    if (install_host != NULL && install_host(&abla_host_table) < 0) {
+        abla_publish_failure(
+            ABLA_FAILURE_STARTUP,
+            "libabla_app.so does not accept host table version 1"
+        );
+        dlclose(library);
         return NULL;
     }
     AblaMobileRun run_checked = (AblaMobileRun)dlsym(
