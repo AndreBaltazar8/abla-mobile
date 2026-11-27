@@ -12,7 +12,12 @@ import java.security.MessageDigest
 /** Session-isolated decoded images. No credentials or private images are written to disk. */
 internal object RemoteImageCache {
     private data class Entry(val bitmap: Bitmap, val checked: Long, val etag: String?)
-    private val entries=object: LruCache<String,Entry>(8*1024*1024) {
+    // Avatars and the like, and pictures an app shows full width: up to 4 MB fetched and
+    // 4096 pixels a side, decoded at most 1280 a side.
+    private const val MOST_BYTES=4*1024*1024
+    private const val MOST_SIDE=4096
+    private const val DECODED_SIDE=1280
+    private val entries=object: LruCache<String,Entry>(32*1024*1024) {
         override fun sizeOf(key: String,value: Entry)=value.bitmap.allocationByteCount
     }
     private val lock=Any()
@@ -44,14 +49,16 @@ internal object RemoteImageCache {
                         200 -> {
                             val bytes=connection.inputStream.use { stream ->
                                 val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(4096)
-                                while(out.size()<=65536) {val n=stream.read(buffer);if(n<0) break;out.write(buffer,0,n)}
+                                while(out.size()<=MOST_BYTES) {val n=stream.read(buffer);if(n<0) break;out.write(buffer,0,n)}
                                 out.toByteArray()
                             }
-                            require(bytes.size<=65536)
+                            require(bytes.size<=MOST_BYTES)
                             val bounds=BitmapFactory.Options().apply { inJustDecodeBounds=true }
                             BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
-                            require(bounds.outWidth in 1..512 && bounds.outHeight in 1..512)
-                            val bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.size) ?: error("Invalid image")
+                            require(bounds.outWidth in 1..MOST_SIDE && bounds.outHeight in 1..MOST_SIDE)
+                            var sample=1
+                            while(maxOf(bounds.outWidth,bounds.outHeight)/(sample*2)>=DECODED_SIDE) sample*=2
+                            val bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply { inSampleSize=sample }) ?: error("Invalid image")
                             result=Entry(bitmap,SystemClock.elapsedRealtime(),connection.getHeaderField("ETag"))
                         }
                         401,403,404 -> result=null
